@@ -3,64 +3,98 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const API = process.env.REACT_APP_API_URL || 'https://gold-system-api.onrender.com';
 const REFRESH_INTERVAL = 5 * 60 * 1000;
 
-// ── styles inline pour éviter styled-components ──────────────
+const T = {
+  white: '#ffffff',
+  w90: 'rgba(255,255,255,0.9)',
+  w70: 'rgba(255,255,255,0.7)',
+  w50: 'rgba(255,255,255,0.5)',
+  w30: 'rgba(255,255,255,0.3)',
+  w12: 'rgba(255,255,255,0.12)',
+  w08: 'rgba(255,255,255,0.08)',
+  w05: 'rgba(255,255,255,0.05)',
+  up: '#86efac',
+  down: '#fca5a5',
+  upBg: 'rgba(134,239,172,0.12)',
+  downBg: 'rgba(252,165,165,0.12)',
+  mono: "'IBM Plex Mono', monospace",
+  sans: "'Inter', sans-serif",
+};
+
+const glass = {
+  background: 'rgba(255,255,255,0.04)',
+  backdropFilter: 'blur(28px)',
+  WebkitBackdropFilter: 'blur(28px)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)',
+};
+
 const css = {
-  app: { maxWidth: 1300, margin: '0 auto', padding: '20px 16px' },
+  app: { maxWidth: 1280, margin: '0 auto', padding: '24px 20px 48px', position: 'relative', zIndex: 1 },
   nav: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 18px', marginBottom: 18,
-    background: '#111115', border: '1px solid rgba(201,168,76,0.12)',
-    borderRadius: 4, position: 'relative', overflow: 'hidden',
+    padding: '14px 22px', marginBottom: 20,
+    ...glass, borderRadius: 20, position: 'relative', overflow: 'hidden',
   },
   navLine: {
     position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-    background: 'linear-gradient(90deg,transparent,#C9A84C,transparent)',
+    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)',
   },
-  brand: { display: 'flex', alignItems: 'center', gap: 12 },
+  brand: { display: 'flex', alignItems: 'center', gap: 14 },
   logo: {
-    width: 34, height: 34, border: '1px solid #C9A84C', borderRadius: 2,
+    width: 38, height: 38,
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.18)',
+    borderRadius: 12,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'Space Mono, monospace', fontSize: 11, color: '#C9A84C', fontWeight: 700,
+    fontFamily: T.mono, fontSize: 11, color: T.white, fontWeight: 600,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
   },
   navRight: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   tabs: {
-    display: 'flex', gap: 4, background: '#111115',
-    border: '1px solid rgba(201,168,76,0.12)', borderRadius: 4,
-    padding: 4, marginBottom: 18, overflowX: 'auto',
+    display: 'flex', gap: 6, ...glass,
+    borderRadius: 16, padding: 6, marginBottom: 20, overflowX: 'auto',
   },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
-  grid3: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 },
-  grid4: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 },
+  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
+  grid3: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 },
+  grid4: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 },
   card: {
-    background: '#111115', border: '1px solid rgba(201,168,76,0.1)',
-    borderRadius: 4, padding: 16, position: 'relative', overflow: 'hidden',
+    ...glass, borderRadius: 20, padding: 20, position: 'relative', overflow: 'hidden',
   },
   cardBar: (color) => ({
-    position: 'absolute', top: 0, left: 0, width: 3, height: '100%',
-    background: color, borderRadius: '2px 0 0 2px',
+    position: 'absolute', top: 0, left: 0, width: 2, height: '100%',
+    background: color, borderRadius: '2px 0 0 2px', opacity: 0.85,
   }),
   cardLabel: {
-    fontFamily: 'Space Mono, monospace', fontSize: 10,
-    color: '#45433e', letterSpacing: '.12em', textTransform: 'uppercase',
-    marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    fontFamily: T.mono, fontSize: 10,
+    color: T.w50, letterSpacing: '.14em', textTransform: 'uppercase',
+    marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   },
   row: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '8px 0', borderBottom: '1px solid rgba(201,168,76,0.08)',
+    padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
+  },
+  divider: { borderBottom: '1px solid rgba(255,255,255,0.06)' },
+  glassInner: {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
   },
 };
 
 // ── helpers ──────────────────────────────────────────────────
 function mono(text, color, size = 12) {
-  return <span style={{ fontFamily: 'Space Mono, monospace', fontSize: size, color }}>{text}</span>;
+  return <span style={{ fontFamily: T.mono, fontSize: size, color }}>{text}</span>;
 }
 
 function badge(text, bg, color, border) {
   return (
     <span style={{
-      fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700,
-      padding: '3px 9px', borderRadius: 2, letterSpacing: '.07em',
+      fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+      padding: '4px 10px', borderRadius: 8, letterSpacing: '.07em',
       background: bg, color, border: `1px solid ${border}`,
+      backdropFilter: 'blur(8px)',
     }}>{text}</span>
   );
 }
@@ -80,18 +114,18 @@ function useUTCClock() {
 }
 
 // ── INSTRUMENT ROW ────────────────────────────────────────────
-function InstrRow({ label, sub, ico, icoBg, icoColor, data, isLong, isShort, loading }) {
+function InstrRow({ label, sub, ico, data, isLong, isShort, loading }) {
   if (loading) return (
     <div style={{ ...css.row, gap: 0 }}>
-      <div style={{ height: 12, width: 100, background: '#1f1f28', borderRadius: 2 }} />
-      <div style={{ height: 12, width: 60, background: '#1f1f28', borderRadius: 2 }} />
+      <div className="skeleton" style={{ height: 12, width: 100 }} />
+      <div className="skeleton" style={{ height: 12, width: 60 }} />
     </div>
   );
   if (!data || data.error) return (
     <div style={css.row}>
-      <span style={{ fontSize: 12, color: '#8a8578' }}>{label}</span>
-      <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: '#ef4444' }}>
-        {data?.error || 'N/D'}
+      <span style={{ fontSize: 12, color: T.w50 }}>{label}</span>
+      <span style={{ fontFamily: T.mono, fontSize: 10, color: T.down }}>
+        {data?.error ? 'Erreur API' : 'N/D'}
       </span>
     </div>
   );
@@ -99,37 +133,40 @@ function InstrRow({ label, sub, ico, icoBg, icoColor, data, isLong, isShort, loa
   const up = data.change_pct >= 0;
   return (
     <div style={{ ...css.row, gap: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
-          width: 22, height: 22, borderRadius: 2, background: icoBg, color: icoColor,
+          width: 32, height: 32, borderRadius: 10,
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: T.w70,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'Space Mono, monospace', fontSize: 9, fontWeight: 700,
+          fontFamily: T.mono, fontSize: 9, fontWeight: 600,
         }}>{ico}</div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-          <div style={{ fontSize: 10, color: '#45433e', marginTop: 1 }}>{sub}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.w90 }}>{label}</div>
+          <div style={{ fontSize: 10, color: T.w30, marginTop: 2 }}>{sub}</div>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 13, fontWeight: 700 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 14, fontWeight: 600, color: T.white }}>
             {data.price?.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: up ? '#22c55e' : '#ef4444' }}>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: up ? T.up : T.down }}>
             {up ? '+' : ''}{data.change_pct?.toFixed(2)}%
           </div>
           {data.ma && (
-            <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e' }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.w30 }}>
               MA{data.ma_period}: {data.ma?.toFixed(2)}
             </div>
           )}
         </div>
         <div style={{
-          fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700,
-          padding: '3px 8px', borderRadius: 2, minWidth: 62, textAlign: 'center',
-          background: isLong ? 'rgba(34,197,94,0.1)' : isShort ? 'rgba(239,68,68,0.1)' : '#1f1f28',
-          border: `1px solid ${isLong ? '#22c55e' : isShort ? '#ef4444' : 'rgba(201,168,76,0.1)'}`,
-          color: isLong ? '#22c55e' : isShort ? '#ef4444' : '#45433e',
+          fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+          padding: '5px 10px', borderRadius: 8, minWidth: 68, textAlign: 'center',
+          background: isLong ? T.upBg : isShort ? T.downBg : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${isLong ? 'rgba(134,239,172,0.35)' : isShort ? 'rgba(252,165,165,0.35)' : T.w08}`,
+          color: isLong ? T.up : isShort ? T.down : T.w30,
         }}>
           {isLong ? '▲ LONG' : isShort ? '▼ SHORT' : '—'}
         </div>
@@ -142,14 +179,16 @@ function InstrRow({ label, sub, ico, icoBg, icoColor, data, isLong, isShort, loa
 function SessCard({ name, time, active }) {
   return (
     <div style={{
-      background: active ? 'rgba(201,168,76,0.08)' : '#18181d',
-      border: `1px solid ${active ? '#C9A84C' : 'rgba(201,168,76,0.1)'}`,
-      borderRadius: 4, padding: '10px 8px', textAlign: 'center', transition: '.2s',
+      ...css.glassInner,
+      background: active ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)',
+      border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.06)'}`,
+      padding: '12px 8px', textAlign: 'center', transition: 'all 0.25s ease',
+      boxShadow: active ? 'inset 0 1px 0 rgba(255,255,255,0.12)' : 'none',
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: active ? '#C9A84C' : '#8a8578' }}>{name}</div>
-      <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e', marginTop: 2 }}>{time}</div>
-      <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700, marginTop: 5, color: active ? '#C9A84C' : '#45433e' }}>
-        {active ? 'ACTIVE' : 'CLOSED'}
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', color: active ? T.white : T.w50 }}>{name}</div>
+      <div style={{ fontFamily: T.mono, fontSize: 9, color: T.w30, marginTop: 4 }}>{time}</div>
+      <div style={{ fontFamily: T.mono, fontSize: 9, fontWeight: 600, marginTop: 6, color: active ? T.w90 : T.w30, letterSpacing: '.1em' }}>
+        {active ? '● ACTIVE' : '○ CLOSED'}
       </div>
     </div>
   );
@@ -158,23 +197,23 @@ function SessCard({ name, time, active }) {
 // ── STEP ─────────────────────────────────────────────────────
 function PlanStep({ num, title, desc, color }) {
   const colors = {
-    green: { bg: 'rgba(34,197,94,0.1)', border: '#22c55e', text: '#22c55e' },
-    red:   { bg: 'rgba(239,68,68,0.1)', border: '#ef4444', text: '#ef4444' },
-    blue:  { bg: 'rgba(96,165,250,0.1)', border: '#60a5fa', text: '#60a5fa' },
-    orange:{ bg: 'rgba(245,158,11,0.1)', border: '#f59e0b', text: '#f59e0b' },
-  }[color] || { bg: 'rgba(245,158,11,0.1)', border: '#f59e0b', text: '#f59e0b' };
+    green: { bg: T.upBg, border: 'rgba(134,239,172,0.3)', text: T.up },
+    red:   { bg: T.downBg, border: 'rgba(252,165,165,0.3)', text: T.down },
+    blue:  { bg: 'rgba(255,255,255,0.06)', border: T.w12, text: T.w90 },
+    orange:{ bg: 'rgba(255,255,255,0.05)', border: T.w12, text: T.w70 },
+  }[color] || { bg: 'rgba(255,255,255,0.05)', border: T.w12, text: T.w70 };
 
   return (
-    <div style={{ display: 'flex', gap: 14, padding: '11px 0', borderBottom: '1px solid rgba(201,168,76,0.08)' }}>
+    <div style={{ display: 'flex', gap: 14, padding: '12px 0', ...css.divider }}>
       <div style={{
-        width: 28, height: 28, borderRadius: 2, flexShrink: 0,
+        width: 30, height: 30, borderRadius: 10, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'Space Mono, monospace', fontSize: 12, fontWeight: 700, marginTop: 2,
+        fontFamily: T.mono, fontSize: 11, fontWeight: 600, marginTop: 2,
         background: colors.bg, border: `1px solid ${colors.border}`, color: colors.text,
       }}>{num}</div>
       <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: 12, color: '#8a8578', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: desc }} />
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.w90, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 12, color: T.w50, lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: desc }} />
       </div>
     </div>
   );
@@ -183,9 +222,9 @@ function PlanStep({ num, title, desc, color }) {
 // ── RISK ROW ─────────────────────────────────────────────────
 function RRow({ k, v, vc }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(201,168,76,0.08)' }}>
-      <span style={{ fontSize: 12, color: '#8a8578', fontWeight: 600 }}>{k}</span>
-      <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, fontWeight: 700, color: vc || '#8a8578' }}>{v}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', ...css.divider }}>
+      <span style={{ fontSize: 12, color: T.w50, fontWeight: 500 }}>{k}</span>
+      <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 600, color: vc || T.w70 }}>{v}</span>
     </div>
   );
 }
@@ -193,10 +232,10 @@ function RRow({ k, v, vc }) {
 // ── GLOS ITEM ─────────────────────────────────────────────────
 function GItem({ term, def, role }) {
   return (
-    <div style={{ padding: '9px 0', borderBottom: '1px solid rgba(201,168,76,0.08)' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#C9A84C', marginBottom: 4 }}>{term}</div>
-      <div style={{ fontSize: 12, color: '#8a8578', lineHeight: 1.6 }}>{def}</div>
-      {role && <div style={{ fontSize: 11, color: '#45433e', marginTop: 3, fontStyle: 'italic' }}>{role}</div>}
+    <div style={{ padding: '10px 0', ...css.divider }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: T.white, marginBottom: 4 }}>{term}</div>
+      <div style={{ fontSize: 12, color: T.w50, lineHeight: 1.6 }}>{def}</div>
+      {role && <div style={{ fontSize: 11, color: T.w30, marginTop: 4, fontStyle: 'italic' }}>{role}</div>}
     </div>
   );
 }
@@ -204,9 +243,9 @@ function GItem({ term, def, role }) {
 // ── PLAN LONG ─────────────────────────────────────────────────
 function PlanLong() {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <div style={css.card}>
-        <div style={css.cardBar('#22c55e')} />
+        <div style={css.cardBar(T.up)} />
         <div style={css.cardLabel}>Plan d'entrée Long — 5 étapes</div>
         <PlanStep num="1" color="green" title="Macro Long ≥3/4 — automatique"
           desc="DXY Bear + TLT Fall + VIX &gt;20 + SPX Bear. Le dashboard lit les données en temps réel. Si &lt;3/4 → aucun Long ce jour." />
@@ -222,18 +261,18 @@ function PlanLong() {
           desc="Si DIV↑ présent → trade A+. Absent → trade B. Zone + SSL + Volume suffisent pour entrer." />
       </div>
       <div>
-        <div style={{ ...css.card, marginBottom: 12 }}>
-          <div style={css.cardBar('#22c55e')} />
+        <div style={{ ...css.card, marginBottom: 14 }}>
+          <div style={css.cardBar(T.up)} />
           <div style={css.cardLabel}>Gestion trade Long</div>
           <RRow k="Prix d'entrée" v="Clôture bougie vol. vert" />
-          <RRow k="Stop Loss" v="Bas SSL − 1.5× ATR" vc="#ef4444" />
-          <RRow k="Take Profit" v="Entrée + (dist.SL × 2)" vc="#22c55e" />
-          <RRow k="Breakeven" v="SL → entrée dès TP1" vc="#60a5fa" />
-          <RRow k="Risque / trade" v="1 – 2% du capital" vc="#C9A84C" />
-          <RRow k="RR minimum" v="2:1" vc="#C9A84C" />
+          <RRow k="Stop Loss" v="Bas SSL − 1.5× ATR" vc={T.down} />
+          <RRow k="Take Profit" v="Entrée + (dist.SL × 2)" vc={T.up} />
+          <RRow k="Breakeven" v="SL → entrée dès TP1" vc={T.w90} />
+          <RRow k="Risque / trade" v="1 – 2% du capital" vc={T.white} />
+          <RRow k="RR minimum" v="2:1" vc={T.white} />
         </div>
         <div style={css.card}>
-          <div style={css.cardBar('#ef4444')} />
+          <div style={css.cardBar(T.down)} />
           <div style={css.cardLabel}>Invalidations Long</div>
           <RRow k="Zone verte → grise" v="Zone morte" />
           <RRow k="Macro &lt;3/4 Long" v="Biais perdu" />
@@ -248,9 +287,9 @@ function PlanLong() {
 // ── PLAN SHORT ────────────────────────────────────────────────
 function PlanShort() {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <div style={css.card}>
-        <div style={css.cardBar('#ef4444')} />
+        <div style={css.cardBar(T.down)} />
         <div style={css.cardLabel}>Plan d'entrée Short — 5 étapes</div>
         <PlanStep num="1" color="red" title="Macro Short ≥3/4 — automatique"
           desc="DXY Bull + TLT Rise + VIX &lt;20 + SPX Bull. Dashboard en temps réel. Si &lt;3/4 → aucun Short ce jour." />
@@ -266,18 +305,18 @@ function PlanShort() {
           desc="Si DIV↓ présent → trade A+. Absent → trade B. Zone + BSL + Volume suffisent." />
       </div>
       <div>
-        <div style={{ ...css.card, marginBottom: 12 }}>
-          <div style={css.cardBar('#ef4444')} />
+        <div style={{ ...css.card, marginBottom: 14 }}>
+          <div style={css.cardBar(T.down)} />
           <div style={css.cardLabel}>Gestion trade Short</div>
           <RRow k="Prix d'entrée" v="Clôture bougie vol. rouge" />
-          <RRow k="Stop Loss" v="Haut BSL + 1.5× ATR" vc="#ef4444" />
-          <RRow k="Take Profit" v="Entrée − (dist.SL × 2)" vc="#22c55e" />
-          <RRow k="Breakeven" v="SL → entrée dès TP1" vc="#60a5fa" />
-          <RRow k="Risque / trade" v="1 – 2% du capital" vc="#C9A84C" />
-          <RRow k="RR minimum" v="2:1" vc="#C9A84C" />
+          <RRow k="Stop Loss" v="Haut BSL + 1.5× ATR" vc={T.down} />
+          <RRow k="Take Profit" v="Entrée − (dist.SL × 2)" vc={T.up} />
+          <RRow k="Breakeven" v="SL → entrée dès TP1" vc={T.w90} />
+          <RRow k="Risque / trade" v="1 – 2% du capital" vc={T.white} />
+          <RRow k="RR minimum" v="2:1" vc={T.white} />
         </div>
         <div style={css.card}>
-          <div style={css.cardBar('#ef4444')} />
+          <div style={css.cardBar(T.down)} />
           <div style={css.cardLabel}>Invalidations Short</div>
           <RRow k="Zone rouge → grise" v="Zone morte" />
           <RRow k="Macro &lt;3/4 Short" v="Biais perdu" />
@@ -292,9 +331,9 @@ function PlanShort() {
 // ── GLOSSAIRE ─────────────────────────────────────────────────
 function Glossaire() {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <div style={css.card}>
-        <div style={css.cardBar('#C9A84C')} />
+        <div style={css.cardBar(T.white)} />
         <div style={css.cardLabel}>Indicateurs macro</div>
         <GItem term="DXY — Dollar Index" def="Mesure la force du dollar US contre 6 devises majeures (EUR, JPY, GBP, CAD, SEK, CHF)." role="Corrélation INVERSE Gold. DXY↑ = pression baissière Gold." />
         <GItem term="TLT — Obligations US 20 ans" def="ETF proxy des taux d'intérêt réels américains. TLT monte = taux baissent." role="TLT↑ = taux réels↓ = Gold attractif comme valeur refuge." />
@@ -305,7 +344,7 @@ function Glossaire() {
       </div>
       <div>
         <div style={{ ...css.card, marginBottom: 12 }}>
-          <div style={css.cardBar('#60a5fa')} />
+          <div style={css.cardBar(T.w50)} />
           <div style={css.cardLabel}>Zones & Liquidité</div>
           <GItem term="Supply Zone (rouge)" def="Zone de vente institutionnelle passée. Créée par un pivot high." role="Plafond potentiel. Point d'entrée SHORT si conditions réunies." />
           <GItem term="Demand Zone (verte)" def="Zone d'achat institutionnel passé. Créée par un pivot low." role="Plancher potentiel. Point d'entrée LONG si conditions réunies." />
@@ -313,7 +352,7 @@ function Glossaire() {
           <GItem term="SSL — Sell-Side Liquidity" def="Stops de vente placés sous les equal lows par les acheteurs." role="SSL✂ = piège baissier institutionnel → Long après." />
         </div>
         <div style={css.card}>
-          <div style={css.cardBar('#f59e0b')} />
+          <div style={css.cardBar(T.w30)} />
           <div style={css.cardLabel}>Signaux techniques</div>
           <GItem term="RSI Divergence haussière DIV↑" def="Prix fait un plus bas mais RSI fait un plus haut. Faiblesse des vendeurs." role="Bonus confirmation Long. Trade B devient A+." />
           <GItem term="RSI Divergence baissière DIV↓" def="Prix fait un plus haut mais RSI fait un plus bas. Faiblesse des acheteurs." role="Bonus confirmation Short. Trade B devient A+." />
@@ -337,52 +376,52 @@ function Discipline() {
     ['Risque 1–2% du capital.', 'Avec RR 2:1, système rentable dès 34% de winrate sur le long terme.'],
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <div style={css.card}>
-        <div style={css.cardBar('#ef4444')} />
+        <div style={css.cardBar(T.w50)} />
         <div style={css.cardLabel}>7 règles non négociables</div>
         {rules.map(([title, desc], i) => (
-          <div key={i} style={{ display: 'flex', gap: 12, padding: '9px 0', borderBottom: '1px solid rgba(201,168,76,0.08)', alignItems: 'flex-start' }}>
+          <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0', ...css.divider, alignItems: 'flex-start' }}>
             <div style={{
-              width: 22, height: 22, borderRadius: 2, flexShrink: 0,
-              background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', color: '#ef4444',
+              width: 24, height: 24, borderRadius: 8, flexShrink: 0,
+              background: 'rgba(255,255,255,0.06)', border: `1px solid ${T.w12}`, color: T.w70,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700,
+              fontFamily: T.mono, fontSize: 10, fontWeight: 600,
             }}>{i + 1}</div>
             <div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#e8e4d8' }}>{title}</span>
-              <span style={{ fontSize: 12, color: '#8a8578' }}> {desc}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: T.w90 }}>{title}</span>
+              <span style={{ fontSize: 12, color: T.w50 }}> {desc}</span>
             </div>
           </div>
         ))}
       </div>
       <div>
         <div style={{ ...css.card, marginBottom: 12 }}>
-          <div style={css.cardBar('#C9A84C')} />
+          <div style={css.cardBar(T.white)} />
           <div style={css.cardLabel}>Grille de qualité des setups</div>
           {[
-            ['Trade A+', 'Zone + SSL/BSL + Volume + RSI Div', '4/4', '#22c55e'],
-            ['Trade B',  'Zone + SSL/BSL + Volume (sans RSI)', '3/4', '#60a5fa'],
-            ['Attendre', '2/4 — setup en formation', '2/4', '#f59e0b'],
-            ['Ignorer',  'Macro neutre ou <2 conditions', '0-1/4', '#ef4444'],
+            ['Trade A+', 'Zone + SSL/BSL + Volume + RSI Div', '4/4', T.up],
+            ['Trade B',  'Zone + SSL/BSL + Volume (sans RSI)', '3/4', T.w90],
+            ['Attendre', '2/4 — setup en formation', '2/4', T.w50],
+            ['Ignorer',  'Macro neutre ou <2 conditions', '0-1/4', T.down],
           ].map(([label, desc, score, color]) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(201,168,76,0.08)' }}>
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', ...css.divider }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color }}>{label}</div>
-                <div style={{ fontSize: 10, color: '#45433e', marginTop: 2 }}>{desc}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color }}>{label}</div>
+                <div style={{ fontSize: 10, color: T.w30, marginTop: 2 }}>{desc}</div>
               </div>
-              <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 13, fontWeight: 700, color }}>{score}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 600, color }}>{score}</span>
             </div>
           ))}
         </div>
         <div style={css.card}>
-          <div style={css.cardBar('#C9A84C')} />
+          <div style={css.cardBar(T.w50)} />
           <div style={css.cardLabel}>Mathématiques du système</div>
-          <RRow k="Breakeven winrate (RR 2:1)" v="34%" vc="#C9A84C" />
-          <RRow k="2 pertes × 2% risque" v="−4% drawdown" vc="#ef4444" />
-          <RRow k="1 win × 2% risque" v="+4% gain" vc="#22c55e" />
-          <RRow k="Session prioritaire" v="Overlap 15h-18h" vc="#C9A84C" />
-          <RRow k="Refresh données" v="Toutes les 5 min" vc="#45433e" />
+          <RRow k="Breakeven winrate (RR 2:1)" v="34%" vc={T.white} />
+          <RRow k="2 pertes × 2% risque" v="−4% drawdown" vc={T.down} />
+          <RRow k="1 win × 2% risque" v="+4% gain" vc={T.up} />
+          <RRow k="Session prioritaire" v="Overlap 15h-18h" vc={T.w90} />
+          <RRow k="Refresh données" v="Toutes les 5 min" vc={T.w30} />
         </div>
       </div>
     </div>
@@ -442,6 +481,10 @@ export default function GoldSystemApp() {
   ];
 
   return (
+    <div className="app-shell">
+      <div className="orb orb-1" />
+      <div className="orb orb-2" />
+      <div className="orb orb-3" />
     <div style={css.app}>
       {/* NAV */}
       <nav style={css.nav}>
@@ -449,41 +492,43 @@ export default function GoldSystemApp() {
         <div style={css.brand}>
           <div style={css.logo}>Au</div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '.06em' }}>
-              GOLD SYSTEM <span style={{ color: '#C9A84C' }}>v5</span>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '.04em', color: T.white }}>
+              GOLD SYSTEM <span style={{ color: T.w50, fontWeight: 400 }}>v5</span>
             </div>
-            <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e', letterSpacing: '.1em', marginTop: 2 }}>
-              XAU/USD · H1 · INTRADAY · DONNÉES AUTOMATISÉES
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.w30, letterSpacing: '.12em', marginTop: 3 }}>
+              XAU/USD · H1 · INTRADAY · LIQUID GLASS
             </div>
           </div>
         </div>
         <div style={css.navRight}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Space Mono, monospace', fontSize: 10, color: '#8a8578' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: T.mono, fontSize: 10, color: T.w50 }}>
             <span style={{
-              width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
-              background: error ? '#ef4444' : loading ? '#f59e0b' : '#22c55e',
+              width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
+              background: error ? T.down : loading ? T.w50 : T.up,
               animation: 'pulse 2s infinite',
             }} />
-            {error ? 'ERREUR API' : loading ? 'SYNC...' : `MAJ: ${lastFetch} · refresh: ${countdown}s`}
+            {error ? 'ERREUR API' : loading ? 'SYNC...' : `MAJ: ${lastFetch} · ${countdown}s`}
           </div>
-          <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 13, color: '#C9A84C', letterSpacing: '.1em' }}>{clock}</div>
+          <div style={{ fontFamily: T.mono, fontSize: 13, color: T.w90, letterSpacing: '.08em' }}>{clock}</div>
           <div style={{
-            fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700,
-            padding: '4px 10px', borderRadius: 2, letterSpacing: '.08em',
-            background: sess?.overlap ? 'rgba(245,158,11,0.1)' : sess?.active ? 'rgba(96,165,250,0.1)' : '#18181d',
-            border: `1px solid ${sess?.overlap ? '#f59e0b' : sess?.active ? '#60a5fa' : 'rgba(201,168,76,0.1)'}`,
-            color: sess?.overlap ? '#f59e0b' : sess?.active ? '#60a5fa' : '#45433e',
+            fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+            padding: '5px 12px', borderRadius: 10, letterSpacing: '.08em',
+            background: sess?.active ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${sess?.active ? 'rgba(255,255,255,0.2)' : T.w08}`,
+            color: sess?.active ? T.white : T.w30,
           }}>
             {loading ? '...' : (sess?.name || 'CHARGEMENT')}
           </div>
           <button
+            className="glass-btn"
             onClick={fetchData}
             disabled={loading}
             style={{
-              fontFamily: 'Space Mono, monospace', fontSize: 10, padding: '4px 10px',
-              borderRadius: 2, border: '1px solid rgba(201,168,76,0.28)',
-              background: 'transparent', color: '#C9A84C', cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? .4 : 1, transition: '.15s',
+              fontFamily: T.mono, fontSize: 10, padding: '6px 14px',
+              borderRadius: 10, border: `1px solid ${T.w12}`,
+              background: 'rgba(255,255,255,0.04)', color: T.w90,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? .4 : 1,
             }}
           >{loading ? '...' : '↻ REFRESH'}</button>
         </div>
@@ -494,14 +539,16 @@ export default function GoldSystemApp() {
         {tabs.map(([id, label]) => (
           <button
             key={id}
+            className="tab-btn"
             onClick={() => setTab(id)}
             style={{
-              flex: 1, minWidth: 'fit-content', padding: '8px 14px',
-              background: tab === id ? '#1f1f28' : 'transparent',
-              border: tab === id ? '1px solid rgba(201,168,76,0.28)' : '1px solid transparent',
-              borderRadius: 2, color: tab === id ? '#C9A84C' : '#45433e',
-              fontFamily: 'Syne, sans-serif', fontSize: 12, fontWeight: tab === id ? 700 : 400,
-              letterSpacing: '.06em', cursor: 'pointer', whiteSpace: 'nowrap', transition: '.15s',
+              flex: 1, minWidth: 'fit-content', padding: '10px 16px',
+              background: tab === id ? 'rgba(255,255,255,0.1)' : 'transparent',
+              border: tab === id ? `1px solid ${T.w12}` : '1px solid transparent',
+              borderRadius: 12, color: tab === id ? T.white : T.w30,
+              fontFamily: T.sans, fontSize: 12, fontWeight: tab === id ? 600 : 400,
+              letterSpacing: '.04em', cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: tab === id ? 'inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
             }}
           >{label}</button>
         ))}
@@ -512,22 +559,22 @@ export default function GoldSystemApp() {
         <>
           {error && (
             <div style={{
-              background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444',
-              borderRadius: 4, padding: 14, marginBottom: 12,
-              fontFamily: 'Space Mono, monospace', fontSize: 12, color: '#ef4444',
+              ...glass, background: T.downBg, border: '1px solid rgba(252,165,165,0.25)',
+              borderRadius: 16, padding: 16, marginBottom: 14,
+              fontFamily: T.mono, fontSize: 12, color: T.down,
             }}>
               ⚠ Impossible de joindre l'API : {error}
-              <br /><span style={{ color: '#8a8578', fontSize: 10 }}>
-                Vérifiez que le backend Render est démarré. URL configurée : {API}
+              <br /><span style={{ color: T.w50, fontSize: 10 }}>
+                Vérifiez que le backend Render est démarré. URL : {API}
               </span>
             </div>
           )}
 
           {/* ROW 1 — Sessions + Biais */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, marginBottom: 12 }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14, marginBottom: 14 }}>
             <div style={css.card}>
-              <div style={css.cardBar('#C9A84C')} />
-              <div style={css.cardLabel}>Sessions <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e' }}>{clock}</span></div>
+              <div style={css.cardBar(T.white)} />
+              <div style={css.cardLabel}>Sessions <span style={{ fontFamily: T.mono, fontSize: 9, color: T.w30 }}>{clock}</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
                 <SessCard name="LONDON" time="07h–16h UTC" active={sess?.london} />
                 <SessCard name="OVERLAP" time="13h–16h UTC" active={sess?.overlap} />
@@ -535,29 +582,29 @@ export default function GoldSystemApp() {
               </div>
             </div>
             <div style={css.card}>
-              <div style={css.cardBar('#C9A84C')} />
+              <div style={css.cardBar(T.w50)} />
               <div style={css.cardLabel}>Biais macro — automatique temps réel</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[
-                  { label: 'LONG', score: data?.long_score || 0, active: isLong, color: '#22c55e' },
-                  { label: 'SHORT', score: data?.short_score || 0, active: isShort, color: '#ef4444' },
+                  { label: 'LONG', score: data?.long_score || 0, active: isLong, color: T.up },
+                  { label: 'SHORT', score: data?.short_score || 0, active: isShort, color: T.down },
                 ].map(({ label, score, active, color }) => (
                   <div key={label} style={{
-                    background: '#18181d', borderRadius: 4, padding: 14, textAlign: 'center',
-                    border: `1px solid ${active && !loading ? color : 'rgba(201,168,76,0.1)'}`,
-                    transition: '.3s',
+                    ...css.glassInner, padding: 16, textAlign: 'center',
+                    border: `1px solid ${active && !loading ? (label === 'LONG' ? 'rgba(134,239,172,0.3)' : 'rgba(252,165,165,0.3)') : T.w08}`,
+                    transition: 'all 0.3s ease',
                   }}>
-                    <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '.08em', color: active && !loading ? color : '#45433e', marginBottom: 4 }}>
+                    <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '.1em', color: active && !loading ? color : T.w30, marginBottom: 4 }}>
                       {label}
                     </div>
-                    <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 11, color: '#8a8578' }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 11, color: T.w50 }}>
                       {loading ? '–/4 filtres' : `${score}/4 filtres`}
                     </div>
-                    <div style={{ height: 4, background: '#1f1f28', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+                    <div style={{ height: 3, background: T.w05, borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
                       <div style={{
                         height: '100%', borderRadius: 2, transition: 'width .6s ease',
                         width: loading ? '0%' : `${(score / 4) * 100}%`,
-                        background: active ? color : '#45433e',
+                        background: active ? color : T.w30,
                       }} />
                     </div>
                   </div>
@@ -567,33 +614,33 @@ export default function GoldSystemApp() {
           </div>
 
           {/* ROW 2 — Instruments + Corrélations */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
             <div style={css.card}>
-              <div style={css.cardBar('#C9A84C')} />
+              <div style={css.cardBar(T.white)} />
               <div style={css.cardLabel}>
-                Instruments macro — Twelve Data (15min délai)
-                <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e' }}>
-                  {instr?.gold?.price ? `XAU/USD ${instr.gold.price.toLocaleString('fr-FR')}` : ''}
+                Instruments macro — Twelve Data
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.w30 }}>
+                  {instr?.GOLD?.price ? `XAU/USD ${instr.GOLD.price.toLocaleString('fr-FR')}` : ''}
                 </span>
               </div>
-              <InstrRow label="DXY" sub="Dollar Index vs MA20" ico="$" icoBg="rgba(96,165,250,0.1)" icoColor="#60a5fa"
-                data={instr?.dxy} loading={loading}
-                isLong={instr?.dxy?.trend === 'bear'} isShort={instr?.dxy?.trend === 'bull'} />
-              <InstrRow label="TLT" sub="Taux réels US vs MA20" ico="%" icoBg="rgba(245,158,11,0.1)" icoColor="#f59e0b"
-                data={instr?.tlt} loading={loading}
-                isLong={instr?.tlt?.trend === 'bull'} isShort={instr?.tlt?.trend === 'bear'} />
-              <InstrRow label="VIX" sub="Indice de la peur · seuil 20" ico="!" icoBg="rgba(239,68,68,0.1)" icoColor="#ef4444"
-                data={instr?.vix} loading={loading}
-                isLong={(instr?.vix?.price || 0) > 20} isShort={(instr?.vix?.price || 0) <= 20 && !!instr?.vix} />
-              <InstrRow label="SPX" sub="S&P 500 vs MA50" ico="S" icoBg="rgba(34,197,94,0.1)" icoColor="#22c55e"
-                data={instr?.spx} loading={loading}
-                isLong={instr?.spx?.trend === 'bear'} isShort={instr?.spx?.trend === 'bull'} />
-              <InstrRow label="XAU/USD" sub="Gold Spot — référence" ico="Au" icoBg="rgba(201,168,76,0.12)" icoColor="#C9A84C"
-                data={instr?.gold} loading={loading}
+              <InstrRow label="DXY" sub="Dollar Index vs MA20" ico="$"
+                data={instr?.DXY} loading={loading}
+                isLong={instr?.DXY?.trend === 'bear'} isShort={instr?.DXY?.trend === 'bull'} />
+              <InstrRow label="TLT" sub="Taux réels US vs MA20" ico="%"
+                data={instr?.TLT} loading={loading}
+                isLong={instr?.TLT?.trend === 'bull'} isShort={instr?.TLT?.trend === 'bear'} />
+              <InstrRow label="VIX" sub="Indice de la peur · seuil 20" ico="!"
+                data={instr?.VIX} loading={loading}
+                isLong={(instr?.VIX?.price || 0) > 20} isShort={(instr?.VIX?.price || 0) <= 20 && !!instr?.VIX} />
+              <InstrRow label="SPX" sub="S&P 500 vs MA50" ico="S"
+                data={instr?.SPX} loading={loading}
+                isLong={instr?.SPX?.trend === 'bear'} isShort={instr?.SPX?.trend === 'bull'} />
+              <InstrRow label="XAU/USD" sub="Gold Spot — référence" ico="Au"
+                data={instr?.GOLD} loading={loading}
                 isLong={isLong} isShort={isShort} />
             </div>
             <div style={css.card}>
-              <div style={css.cardBar('#60a5fa')} />
+              <div style={css.cardBar(T.w50)} />
               <div style={css.cardLabel}>Corrélations Gold</div>
               {[
                 { name: 'DXY', val: -0.85 },
@@ -601,27 +648,28 @@ export default function GoldSystemApp() {
                 { name: 'VIX', val: +0.61 },
                 { name: 'SPX', val: -0.45 },
               ].map(({ name, val }) => (
-                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid rgba(201,168,76,0.08)' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#C9A84C', width: 42 }}>{name}</span>
-                  <div style={{ flex: 1, height: 5, background: '#1f1f28', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', ...css.divider }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.w70, width: 42 }}>{name}</span>
+                  <div style={{ flex: 1, height: 4, background: T.w05, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
                     <div style={{
-                      height: '100%', borderRadius: 3, position: 'absolute',
+                      height: '100%', borderRadius: 2, position: 'absolute',
                       width: `${Math.abs(val) * 50}%`,
-                      background: val < 0 ? '#ef4444' : '#22c55e',
+                      background: val < 0 ? T.down : T.up,
+                      opacity: 0.7,
                       right: val < 0 ? '50%' : undefined,
                       left: val > 0 ? '50%' : undefined,
                     }} />
                   </div>
-                  <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700, width: 42, textAlign: 'right', color: val < 0 ? '#ef4444' : '#22c55e' }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 600, width: 42, textAlign: 'right', color: val < 0 ? T.down : T.up }}>
                     {val > 0 ? '+' : ''}{val.toFixed(2)}
                   </span>
                 </div>
               ))}
-              <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(201,168,76,0.08)' }}>
-                <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e', marginBottom: 8, letterSpacing: '.1em' }}>LOGIQUE INVERSE</div>
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.w08}` }}>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.w30, marginBottom: 8, letterSpacing: '.12em' }}>LOGIQUE INVERSE</div>
                 {[['DXY↑', 'Gold↓'], ['TLT↑', 'Gold↑'], ['VIX↑', 'Gold↑ refuge'], ['SPX↑', 'Gold↓ risk-on']].map(([a, b]) => (
-                  <div key={a} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 11, color: '#8a8578' }}>
-                    <span style={{ fontFamily: 'Space Mono, monospace', color: '#45433e' }}>{a}</span>
+                  <div key={a} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 11, color: T.w50 }}>
+                    <span style={{ fontFamily: T.mono, color: T.w30 }}>{a}</span>
                     <span>{b}</span>
                   </div>
                 ))}
@@ -630,22 +678,22 @@ export default function GoldSystemApp() {
           </div>
 
           {/* ROW 3 — Signal + Filtres actifs */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
             <div style={css.card}>
-              <div style={css.cardBar(isLong ? '#22c55e' : isShort ? '#ef4444' : '#C9A84C')} />
+              <div style={css.cardBar(isLong ? T.up : isShort ? T.down : T.w50)} />
               <div style={css.cardLabel}>Signal du jour — automatique</div>
               <div style={{
-                padding: 20, borderRadius: 4, textAlign: 'center', transition: '.3s',
-                border: `1px solid ${isLong && !loading ? '#22c55e' : isShort && !loading ? '#ef4444' : isPartial ? '#f59e0b' : 'rgba(201,168,76,0.1)'}`,
-                background: isLong && !loading ? 'rgba(34,197,94,0.08)' : isShort && !loading ? 'rgba(239,68,68,0.08)' : isPartial ? 'rgba(245,158,11,0.06)' : 'transparent',
+                ...css.glassInner, padding: 24, textAlign: 'center', transition: 'all 0.3s ease',
+                border: `1px solid ${isLong && !loading ? 'rgba(134,239,172,0.25)' : isShort && !loading ? 'rgba(252,165,165,0.25)' : isPartial ? T.w12 : T.w08}`,
+                background: isLong && !loading ? T.upBg : isShort && !loading ? T.downBg : 'rgba(255,255,255,0.02)',
               }}>
                 <div style={{
-                  fontSize: 28, fontWeight: 800, letterSpacing: '.06em', marginBottom: 8,
-                  color: isLong && !loading ? '#22c55e' : isShort && !loading ? '#ef4444' : isPartial ? '#f59e0b' : '#45433e',
+                  fontSize: 26, fontWeight: 700, letterSpacing: '.08em', marginBottom: 10,
+                  color: isLong && !loading ? T.up : isShort && !loading ? T.down : isPartial ? T.w70 : T.w30,
                 }}>
                   {loading ? '...' : isLong ? 'LONG BIAS' : isShort ? 'SHORT BIAS' : isPartial ? 'PARTIEL' : 'NEUTRE'}
                 </div>
-                <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 11, color: '#8a8578', lineHeight: 1.7 }}>
+                <div style={{ fontFamily: T.mono, fontSize: 11, color: T.w50, lineHeight: 1.7, whiteSpace: 'pre-line' }}>
                   {loading ? 'Chargement des données...' :
                    isLong ? `${data.long_signals.join(' + ')} alignés\nNe prendre que des Longs` :
                    isShort ? `${data.short_signals.join(' + ')} alignés\nNe prendre que des Shorts` :
@@ -653,11 +701,11 @@ export default function GoldSystemApp() {
                    'En attente de données ou biais neutre'}
                 </div>
                 <div style={{
-                  display: 'inline-block', marginTop: 12, padding: '4px 16px', borderRadius: 2,
-                  fontFamily: 'Space Mono, monospace', fontSize: 11, fontWeight: 700, letterSpacing: '.1em',
-                  background: isLong && !loading ? 'rgba(34,197,94,0.1)' : isShort && !loading ? 'rgba(239,68,68,0.1)' : '#1f1f28',
-                  border: `1px solid ${isLong && !loading ? '#22c55e' : isShort && !loading ? '#ef4444' : 'rgba(201,168,76,0.1)'}`,
-                  color: isLong && !loading ? '#22c55e' : isShort && !loading ? '#ef4444' : '#45433e',
+                  display: 'inline-block', marginTop: 14, padding: '6px 18px', borderRadius: 10,
+                  fontFamily: T.mono, fontSize: 11, fontWeight: 600, letterSpacing: '.1em',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${isLong && !loading ? 'rgba(134,239,172,0.3)' : isShort && !loading ? 'rgba(252,165,165,0.3)' : T.w08}`,
+                  color: isLong && !loading ? T.up : isShort && !loading ? T.down : T.w30,
                 }}>
                   {loading ? '–/4' : `${data?.bias === 'LONG' ? data.long_score : data?.bias === 'SHORT' ? data.short_score : Math.max(data?.long_score || 0, data?.short_score || 0)}/4`}
                 </div>
@@ -665,34 +713,34 @@ export default function GoldSystemApp() {
             </div>
 
             <div style={css.card}>
-              <div style={css.cardBar('#C9A84C')} />
+              <div style={css.cardBar(T.white)} />
               <div style={css.cardLabel}>Filtres macro actifs</div>
               {loading ? (
                 [0, 1, 2, 3].map(i => (
                   <div key={i} style={{ ...css.row, gap: 0 }}>
-                    <div style={{ height: 12, width: 80, background: '#1f1f28', borderRadius: 2 }} />
-                    <div style={{ height: 12, width: 100, background: '#1f1f28', borderRadius: 2 }} />
+                    <div className="skeleton" style={{ height: 12, width: 80 }} />
+                    <div className="skeleton" style={{ height: 12, width: 100 }} />
                   </div>
                 ))
               ) : [
-                { label: 'DXY',  longOk: instr?.dxy?.trend === 'bear',  shortOk: instr?.dxy?.trend === 'bull',  hint: instr?.dxy ? `${instr.dxy.price?.toFixed(2)} · MA${instr.dxy.ma?.toFixed(2)}` : 'N/D' },
-                { label: 'TLT',  longOk: instr?.tlt?.trend === 'bull',  shortOk: instr?.tlt?.trend === 'bear',  hint: instr?.tlt ? `${instr.tlt.price?.toFixed(2)} · MA${instr.tlt.ma?.toFixed(2)}` : 'N/D' },
-                { label: 'VIX',  longOk: (instr?.vix?.price || 0) > 20, shortOk: (instr?.vix?.price || 0) <= 20 && !!instr?.vix, hint: instr?.vix ? `${instr.vix.price?.toFixed(2)} · seuil 20` : 'N/D' },
-                { label: 'SPX',  longOk: instr?.spx?.trend === 'bear',  shortOk: instr?.spx?.trend === 'bull',  hint: instr?.spx ? `${instr.spx.price?.toLocaleString('fr-FR')} · MA${instr.spx.ma?.toLocaleString('fr-FR')}` : 'N/D' },
+                { label: 'DXY',  longOk: instr?.DXY?.trend === 'bear',  shortOk: instr?.DXY?.trend === 'bull',  hint: instr?.DXY ? `${instr.DXY.price?.toFixed(2)} · MA${instr.DXY.ma?.toFixed(2)}` : 'N/D' },
+                { label: 'TLT',  longOk: instr?.TLT?.trend === 'bull',  shortOk: instr?.TLT?.trend === 'bear',  hint: instr?.TLT ? `${instr.TLT.price?.toFixed(2)} · MA${instr.TLT.ma?.toFixed(2)}` : 'N/D' },
+                { label: 'VIX',  longOk: (instr?.VIX?.price || 0) > 20, shortOk: (instr?.VIX?.price || 0) <= 20 && !!instr?.VIX, hint: instr?.VIX ? `${instr.VIX.price?.toFixed(2)} · seuil 20` : 'N/D' },
+                { label: 'SPX',  longOk: instr?.SPX?.trend === 'bear',  shortOk: instr?.SPX?.trend === 'bull',  hint: instr?.SPX ? `${instr.SPX.price?.toLocaleString('fr-FR')} · MA${instr.SPX.ma?.toLocaleString('fr-FR')}` : 'N/D' },
               ].map(({ label, longOk, shortOk, hint }) => (
                 <div key={label} style={{ ...css.row }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-                    <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 9, color: '#45433e', marginTop: 2 }}>{hint}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.w90 }}>{label}</div>
+                    <div style={{ fontFamily: T.mono, fontSize: 9, color: T.w30, marginTop: 2 }}>{hint}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {[['▲ L', longOk, '#22c55e', 'rgba(34,197,94,0.1)'], ['▼ S', shortOk, '#ef4444', 'rgba(239,68,68,0.1)']].map(([txt, ok, col, bg]) => (
+                    {[['▲ L', longOk, T.up, T.upBg], ['▼ S', shortOk, T.down, T.downBg]].map(([txt, ok, col, bg]) => (
                       <div key={txt} style={{
-                        fontFamily: 'Space Mono, monospace', fontSize: 10, fontWeight: 700,
-                        padding: '2px 8px', borderRadius: 2, minWidth: 42, textAlign: 'center',
-                        background: ok ? bg : '#1f1f28',
-                        border: `1px solid ${ok ? col : 'rgba(201,168,76,0.1)'}`,
-                        color: ok ? col : '#45433e',
+                        fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+                        padding: '4px 10px', borderRadius: 8, minWidth: 44, textAlign: 'center',
+                        background: ok ? bg : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${ok ? (txt.includes('L') ? 'rgba(134,239,172,0.3)' : 'rgba(252,165,165,0.3)') : T.w08}`,
+                        color: ok ? col : T.w30,
                       }}>{txt}</div>
                     ))}
                   </div>
@@ -702,16 +750,16 @@ export default function GoldSystemApp() {
           </div>
 
           {/* ROW 4 — Métriques */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+          <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
             {[
-              { val: loading ? '–' : (sess?.name || '–'), label: 'Session active', color: sess?.overlap ? '#f59e0b' : sess?.active ? '#60a5fa' : '#45433e' },
-              { val: loading ? '–' : (data?.bias || 'NEUTRE'), label: 'Biais macro', color: isLong ? '#22c55e' : isShort ? '#ef4444' : '#45433e' },
-              { val: loading ? '–' : `${data?.long_score || 0}/4`, label: 'Score Long', color: (data?.long_score || 0) >= 3 ? '#22c55e' : (data?.long_score || 0) >= 2 ? '#f59e0b' : '#45433e' },
-              { val: loading ? '–' : `${data?.short_score || 0}/4`, label: 'Score Short', color: (data?.short_score || 0) >= 3 ? '#ef4444' : (data?.short_score || 0) >= 2 ? '#f59e0b' : '#45433e' },
+              { val: loading ? '–' : (sess?.name || '–'), label: 'Session active', color: sess?.active ? T.white : T.w30 },
+              { val: loading ? '–' : (data?.bias || 'NEUTRE'), label: 'Biais macro', color: isLong ? T.up : isShort ? T.down : T.w30 },
+              { val: loading ? '–' : `${data?.long_score || 0}/4`, label: 'Score Long', color: (data?.long_score || 0) >= 3 ? T.up : (data?.long_score || 0) >= 2 ? T.w70 : T.w30 },
+              { val: loading ? '–' : `${data?.short_score || 0}/4`, label: 'Score Short', color: (data?.short_score || 0) >= 3 ? T.down : (data?.short_score || 0) >= 2 ? T.w70 : T.w30 },
             ].map(({ val, label, color }) => (
-              <div key={label} style={{ background: '#18181d', border: '1px solid rgba(201,168,76,0.1)', borderRadius: 4, padding: 14 }}>
-                <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 22, fontWeight: 700, color, lineHeight: 1 }}>{val}</div>
-                <div style={{ fontSize: 10, color: '#45433e', marginTop: 6, letterSpacing: '.06em' }}>{label}</div>
+              <div key={label} style={{ ...css.glassInner, padding: 16 }}>
+                <div style={{ fontFamily: T.mono, fontSize: 20, fontWeight: 600, color, lineHeight: 1 }}>{val}</div>
+                <div style={{ fontSize: 10, color: T.w30, marginTop: 8, letterSpacing: '.08em', textTransform: 'uppercase' }}>{label}</div>
               </div>
             ))}
           </div>
@@ -722,6 +770,7 @@ export default function GoldSystemApp() {
       {tab === 'short' && <PlanShort />}
       {tab === 'glossaire' && <Glossaire />}
       {tab === 'discipline' && <Discipline />}
+    </div>
     </div>
   );
 }

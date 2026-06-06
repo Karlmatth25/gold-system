@@ -32,35 +32,39 @@ INSTR = {
 async def fetch_one(client, key):
     info = INSTR[key]
     sym = info["symbol"]
-    hit = cached(f"{sym}_{info['ma']}")
+    ma_period = info["ma"]
+    cache_key = f"{sym}_{ma_period}"
+    hit = cached(cache_key)
     if hit:
         return key, hit
     try:
-        price_r, quote_r, ma_r = await asyncio.gather(
-            client.get(f"{BASE}/price?symbol={sym}&apikey={API_KEY}", timeout=8),
-            client.get(f"{BASE}/quote?symbol={sym}&apikey={API_KEY}", timeout=8),
-            client.get(f"{BASE}/ma?symbol={sym}&interval=1day&time_period={info['ma']}&series_type=close&outputsize=1&apikey={API_KEY}", timeout=8),
+        # 1 seul appel / instrument (time_series) → respecte la limite gratuite 8 req/min
+        r = await client.get(
+            f"{BASE}/time_series?symbol={sym}&interval=1day&outputsize={ma_period + 1}&apikey={API_KEY}",
+            timeout=10,
         )
-        p = price_r.json()
-        q = quote_r.json()
-        m = ma_r.json()
-        if "code" in p:
-            return key, {"error": p.get("message", "API error"), "symbol": sym}
-        price = float(p.get("price", 0))
-        prev = float(q.get("previous_close", price))
-        ma_val = float(m["values"][0]["ma"]) if "values" in m and m["values"] else None
+        data = r.json()
+        if data.get("status") == "error" or "code" in data:
+            return key, {"error": data.get("message", "API error"), "symbol": sym}
+        values = data.get("values") or []
+        if len(values) < 2:
+            return key, {"symbol": sym, "error": "Données insuffisantes"}
+        price = float(values[0]["close"])
+        prev = float(values[1]["close"])
+        closes = [float(v["close"]) for v in values[:ma_period]]
+        ma_val = sum(closes) / len(closes) if closes else None
         result = {
             "symbol": sym,
             "name": info["name"],
             "price": round(price, 4),
             "ma": round(ma_val, 4) if ma_val else None,
-            "ma_period": info["ma"],
+            "ma_period": ma_period,
             "above_ma": (price > ma_val) if ma_val else None,
             "change_pct": round((price - prev) / prev * 100, 2) if prev else 0,
             "trend": ("bull" if price > ma_val else "bear") if ma_val else "unknown",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
-        set_cache(f"{sym}_{info['ma']}", result)
+        set_cache(cache_key, result)
         return key, result
     except Exception as e:
         return key, {"symbol": sym, "error": str(e)}
@@ -95,9 +99,12 @@ def get_session():
 
 @app.get("/api/macro")
 async def get_macro():
+    instruments = {}
     async with httpx.AsyncClient() as c:
-        res = await asyncio.gather(*[fetch_one(c, k) for k in INSTR])
-    instruments = {k: v for k, v in res}
+        for k in INSTR:
+            key, val = await fetch_one(c, k)
+            instruments[key] = val
+            await asyncio.sleep(0.15)
     b, ls, ss, lsig, ssig = compute_bias(instruments)
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),

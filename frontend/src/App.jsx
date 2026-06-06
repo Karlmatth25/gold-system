@@ -99,6 +99,12 @@ function badge(text, bg, color, border) {
   );
 }
 
+function instrHint(item, fmt) {
+  if (!item || item.error) return 'Indisponible';
+  if (item.price == null) return 'N/D';
+  return fmt(item);
+}
+
 function useUTCClock() {
   const [t, setT] = useState('');
   useEffect(() => {
@@ -723,10 +729,10 @@ export default function GoldSystemApp() {
                   </div>
                 ))
               ) : [
-                { label: 'DXY',  longOk: instr?.DXY?.trend === 'bear',  shortOk: instr?.DXY?.trend === 'bull',  hint: instr?.DXY ? `${instr.DXY.price?.toFixed(2)} · MA${instr.DXY.ma?.toFixed(2)}` : 'N/D' },
-                { label: 'TLT',  longOk: instr?.TLT?.trend === 'bull',  shortOk: instr?.TLT?.trend === 'bear',  hint: instr?.TLT ? `${instr.TLT.price?.toFixed(2)} · MA${instr.TLT.ma?.toFixed(2)}` : 'N/D' },
-                { label: 'VIX',  longOk: (instr?.VIX?.price || 0) > 20, shortOk: (instr?.VIX?.price || 0) <= 20 && !!instr?.VIX, hint: instr?.VIX ? `${instr.VIX.price?.toFixed(2)} · seuil 20` : 'N/D' },
-                { label: 'SPX',  longOk: instr?.SPX?.trend === 'bear',  shortOk: instr?.SPX?.trend === 'bull',  hint: instr?.SPX ? `${instr.SPX.price?.toLocaleString('fr-FR')} · MA${instr.SPX.ma?.toLocaleString('fr-FR')}` : 'N/D' },
+                { label: 'DXY',  longOk: instr?.DXY?.trend === 'bear',  shortOk: instr?.DXY?.trend === 'bull',  hint: instrHint(instr?.DXY, (i) => `${i.price.toFixed(2)} · MA${i.ma?.toFixed(2)}`) },
+                { label: 'TLT',  longOk: instr?.TLT?.trend === 'bull',  shortOk: instr?.TLT?.trend === 'bear',  hint: instrHint(instr?.TLT, (i) => `${i.price.toFixed(2)} · MA${i.ma?.toFixed(2)}`) },
+                { label: 'VIX',  longOk: (instr?.VIX?.price || 0) > 20, shortOk: (instr?.VIX?.price || 0) <= 20 && !!instr?.VIX && !instr?.VIX?.error, hint: instrHint(instr?.VIX, (i) => `${i.price.toFixed(2)} · seuil 20`) },
+                { label: 'SPX',  longOk: instr?.SPX?.trend === 'bear',  shortOk: instr?.SPX?.trend === 'bull',  hint: instrHint(instr?.SPX, (i) => `${i.price.toLocaleString('fr-FR')} · MA${i.ma?.toLocaleString('fr-FR')}`) },
               ].map(({ label, longOk, shortOk, hint }) => (
                 <div key={label} style={{ ...css.row }}>
                   <div>

@@ -32,7 +32,7 @@ const css = {
   app: { maxWidth: 1280, margin: '0 auto', padding: '24px 20px 48px', position: 'relative', zIndex: 1 },
   nav: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '14px 22px', marginBottom: 20,
+    padding: '14px 22px', marginBottom: 20, flexWrap: 'wrap', gap: 12,
     ...glass, borderRadius: 20, position: 'relative', overflow: 'hidden',
   },
   navLine: {
@@ -48,15 +48,16 @@ const css = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontFamily: T.mono, fontSize: 11, color: T.white, fontWeight: 600,
     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+    flexShrink: 0,
   },
   navRight: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   tabs: {
     display: 'flex', gap: 6, ...glass,
     borderRadius: 16, padding: 6, marginBottom: 20, overflowX: 'auto',
   },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
-  grid3: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 },
-  grid4: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 },
+  grid2: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 },
+  grid3: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 },
+  grid4: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 },
   card: {
     ...glass, borderRadius: 20, padding: 20, position: 'relative', overflow: 'hidden',
   },
@@ -68,10 +69,12 @@ const css = {
     fontFamily: T.mono, fontSize: 10,
     color: T.w50, letterSpacing: '.14em', textTransform: 'uppercase',
     marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   row: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
+    flexWrap: 'wrap', gap: 8,
   },
   divider: { borderBottom: '1px solid rgba(255,255,255,0.06)' },
   glassInner: {
@@ -139,7 +142,7 @@ function InstrRow({ label, sub, ico, data, isLong, isShort, loading }) {
   const up = data.change_pct >= 0;
   return (
     <div style={{ ...css.row, gap: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         <div style={{
           width: 32, height: 32, borderRadius: 10,
           background: 'rgba(255,255,255,0.06)',
@@ -147,13 +150,14 @@ function InstrRow({ label, sub, ico, data, isLong, isShort, loading }) {
           color: T.w70,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: T.mono, fontSize: 9, fontWeight: 600,
+          flexShrink: 0,
         }}>{ico}</div>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.w90 }}>{label}</div>
           <div style={{ fontSize: 10, color: T.w30, marginTop: 2 }}>{sub}</div>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontFamily: T.mono, fontSize: 14, fontWeight: 600, color: T.white }}>
             {data.price?.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -173,6 +177,7 @@ function InstrRow({ label, sub, ico, data, isLong, isShort, loading }) {
           background: isLong ? T.upBg : isShort ? T.downBg : 'rgba(255,255,255,0.04)',
           border: `1px solid ${isLong ? 'rgba(134,239,172,0.35)' : isShort ? 'rgba(252,165,165,0.35)' : T.w08}`,
           color: isLong ? T.up : isShort ? T.down : T.w30,
+          whiteSpace: 'nowrap',
         }}>
           {isLong ? '▲ LONG' : isShort ? '▼ SHORT' : '—'}
         </div>
@@ -228,7 +233,7 @@ function PlanStep({ num, title, desc, color }) {
 // ── RISK ROW ─────────────────────────────────────────────────
 function RRow({ k, v, vc }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', ...css.divider }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', ...css.divider, flexWrap: 'wrap', gap: 8 }}>
       <span style={{ fontSize: 12, color: T.w50, fontWeight: 500 }}>{k}</span>
       <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 600, color: vc || T.w70 }}>{v}</span>
     </div>
@@ -249,7 +254,7 @@ function GItem({ term, def, role }) {
 // ── PLAN LONG ─────────────────────────────────────────────────
 function PlanLong() {
   return (
-    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+    <div className="responsive-grid-2" style={css.grid2}>
       <div style={css.card}>
         <div style={css.cardBar(T.up)} />
         <div style={css.cardLabel}>Plan d'entrée Long — 5 étapes</div>
@@ -260,7 +265,7 @@ function PlanLong() {
         <PlanStep num="3" color="green" title="Zone Demand verte non grise"
           desc="Prix dans ou proche d'une zone verte sur TradingView. Zone grise = morte, ignorer complètement." />
         <PlanStep num="4" color="green" title="SSL chassée — déclencheur"
-          desc="Label <strong>SSL✂</strong> apparaît. Prix perce les equal lows puis revient. Piège institutionnel — le vrai mouvement monte après la chasse." />
+          desc="Label <strong>SSL���</strong> apparaît. Prix perce les equal lows puis revient. Piège institutionnel — le vrai mouvement monte après la chasse." />
         <PlanStep num="5" color="green" title="Volume spike vert → ENTRÉE"
           desc="Bougie verte colorée vif, volume &gt;1.5× MA. <strong>Entrer à la clôture de cette bougie uniquement.</strong>" />
         <PlanStep num="+" color="orange" title="RSI Div↑ — bonus A+"
@@ -293,7 +298,7 @@ function PlanLong() {
 // ── PLAN SHORT ────────────────────────────────────────────────
 function PlanShort() {
   return (
-    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+    <div className="responsive-grid-2" style={css.grid2}>
       <div style={css.card}>
         <div style={css.cardBar(T.down)} />
         <div style={css.cardLabel}>Plan d'entrée Short — 5 étapes</div>
@@ -337,33 +342,33 @@ function PlanShort() {
 // ── GLOSSAIRE ─────────────────────────────────────────────────
 function Glossaire() {
   return (
-    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+    <div className="responsive-grid-2" style={css.grid2}>
       <div style={css.card}>
         <div style={css.cardBar(T.white)} />
         <div style={css.cardLabel}>Indicateurs macro</div>
-        <GItem term="DXY — Dollar Index" def="Mesure la force du dollar US contre 6 devises majeures (EUR, JPY, GBP, CAD, SEK, CHF)." role="Corrélation INVERSE Gold. DXY↑ = pression baissière Gold." />
-        <GItem term="TLT — Obligations US 20 ans" def="ETF proxy des taux d'intérêt réels américains. TLT monte = taux baissent." role="TLT↑ = taux réels↓ = Gold attractif comme valeur refuge." />
-        <GItem term="VIX — Indice de la peur" def="Volatilité implicite du S&P 500. Seuil critique : 20. Au-dessus = panique." role="VIX > 20 = Risk-Off = achat Gold refuge." />
-        <GItem term="SPX — S&P 500" def="Indice des 500 plus grandes capitalisations américaines. Baromètre du risque global." role="SPX↓ = risk-off = rotation vers Gold." />
-        <GItem term="MA20 / MA50" def="Moyenne Mobile 20 ou 50 périodes. Moyenne des N derniers prix de clôture." role="Référence directionnelle pour chaque filtre macro." />
-        <GItem term="ATR" def="Average True Range — volatilité moyenne sur 14 périodes." role="Calibre le Stop Loss automatiquement dans Pine Script." />
+        <GItem term="DXY — Dollar Index" def="Mesure la force du dollar US contre 6 devises majeures (EUR, JPY, GBP, CAD, SEK, CHF)." role="Corrélation INVERSE Gold. DXY↑ = pression baissière" />
+        <GItem term="TLT — Obligations US 20 ans" def="ETF proxy des taux d'intérêt réels américains. TLT monte = taux baissent." role="TLT↑ = taux réels↓ = Gold attractif" />
+        <GItem term="VIX — Indice de la peur" def="Volatilité implicite du S&P 500. Seuil critique : 20. Au-dessus = panique." role="VIX > 20 = Risk-Off = achat Gold refuge" />
+        <GItem term="SPX — S&P 500" def="Indice des 500 plus grandes capitalisations américaines. Baromètre du risque global." role="SPX↓ = risk-off = rotation vers Gold" />
+        <GItem term="MA20 / MA50" def="Moyenne Mobile 20 ou 50 périodes. Moyenne des N derniers prix de clôture." role="Référence directionnelle" />
+        <GItem term="ATR" def="Average True Range — volatilité moyenne sur 14 périodes." role="Calibre Stop Loss" />
       </div>
       <div>
         <div style={{ ...css.card, marginBottom: 12 }}>
           <div style={css.cardBar(T.w50)} />
           <div style={css.cardLabel}>Zones & Liquidité</div>
-          <GItem term="Supply Zone (rouge)" def="Zone de vente institutionnelle passée. Créée par un pivot high." role="Plafond potentiel. Point d'entrée SHORT si conditions réunies." />
-          <GItem term="Demand Zone (verte)" def="Zone d'achat institutionnel passé. Créée par un pivot low." role="Plancher potentiel. Point d'entrée LONG si conditions réunies." />
-          <GItem term="BSL — Buy-Side Liquidity" def="Stops d'achat placés au-dessus des equal highs par les vendeurs à découvert." role="BSL✂ = piège haussier institutionnel → Short après." />
-          <GItem term="SSL — Sell-Side Liquidity" def="Stops de vente placés sous les equal lows par les acheteurs." role="SSL✂ = piège baissier institutionnel → Long après." />
+          <GItem term="Supply Zone (rouge)" def="Zone de vente institutionnelle passée. Créée par un pivot high." role="Plafond potentiel" />
+          <GItem term="Demand Zone (verte)" def="Zone d'achat institutionnel passé. Créée par un pivot low." role="Plancher potentiel" />
+          <GItem term="BSL — Buy-Side Liquidity" def="Stops d'achat placés au-dessus des equal highs par les vendeurs à découvert." role="Piège haussier" />
+          <GItem term="SSL — Sell-Side Liquidity" def="Stops de vente placés sous les equal lows par les acheteurs." role="Piège baissier" />
         </div>
         <div style={css.card}>
           <div style={css.cardBar(T.w30)} />
           <div style={css.cardLabel}>Signaux techniques</div>
-          <GItem term="RSI Divergence haussière DIV↑" def="Prix fait un plus bas mais RSI fait un plus haut. Faiblesse des vendeurs." role="Bonus confirmation Long. Trade B devient A+." />
-          <GItem term="RSI Divergence baissière DIV↓" def="Prix fait un plus haut mais RSI fait un plus bas. Faiblesse des acheteurs." role="Bonus confirmation Short. Trade B devient A+." />
-          <GItem term="Volume Spike" def="Volume bougie > 1.5× MA20. Décision institutionnelle en cours." role="Condition d'entrée obligatoire dans le système." />
-          <GItem term="RR 2:1" def="Risk/Reward. Pour 1$ risqué, on vise 2$ de gain. TP = dist.SL × 2." role="Rentable dès 34% de winrate avec ce ratio." />
+          <GItem term="RSI Divergence haussière DIV↑" def="Prix fait un plus bas mais RSI fait un plus haut." role="Bonus confirmation Long" />
+          <GItem term="RSI Divergence baissière DIV↓" def="Prix fait un plus haut mais RSI fait un plus bas." role="Bonus confirmation Short" />
+          <GItem term="Volume Spike" def="Volume bougie > 1.5× MA20. Décision institutionnelle." role="Condition d'entrée" />
+          <GItem term="RR 2:1" def="Risk/Reward. Pour 1$ risqué, on vise 2$ de gain." role="Rentable dès 34% winrate" />
         </div>
       </div>
     </div>
@@ -374,15 +379,15 @@ function Glossaire() {
 function Discipline() {
   const rules = [
     ['Macro ≥3/4 obligatoire.', 'Dashboard automatisé. Biais neutre → journée observation, zéro trade.'],
-    ['Session obligatoire.', 'Asie = interdit. Badge session affiché en temps réel sur le dashboard.'],
-    ['Zone grise = morte.', 'Ne jamais trader une zone grise sur TradingView. Elle n\'a plus de valeur.'],
-    ['3 conditions minimum.', 'Zone + liquidité + volume. RSI Divergence = bonus uniquement, pas un bloquant.'],
-    ['Clôture de bougie uniquement.', 'Bougie non clôturée peut se retourner. Attendre toujours la clôture.'],
-    ['Maximum 2 trades / jour.', 'Après 2 pertes consécutives → arrêt immédiat de la journée.'],
-    ['Risque 1–2% du capital.', 'Avec RR 2:1, système rentable dès 34% de winrate sur le long terme.'],
+    ['Session obligatoire.', 'Asie = interdit. Badge session affiché en temps réel.'],
+    ['Zone grise = morte.', 'Ne jamais trader une zone grise sur TradingView.'],
+    ['3 conditions minimum.', 'Zone + liquidité + volume. RSI Divergence = bonus.'],
+    ['Clôture de bougie uniquement.', 'Bougie non clôturée peut se retourner.'],
+    ['Maximum 2 trades / jour.', 'Après 2 pertes → arrêt immédiat.'],
+    ['Risque 1–2% du capital.', 'Avec RR 2:1, rentable dès 34% winrate.'],
   ];
   return (
-    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+    <div className="responsive-grid-2" style={css.grid2}>
       <div style={css.card}>
         <div style={css.cardBar(T.w50)} />
         <div style={css.cardLabel}>7 règles non négociables</div>
@@ -411,7 +416,7 @@ function Discipline() {
             ['Attendre', '2/4 — setup en formation', '2/4', T.w50],
             ['Ignorer',  'Macro neutre ou <2 conditions', '0-1/4', T.down],
           ].map(([label, desc, score, color]) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', ...css.divider }}>
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', ...css.divider, flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color }}>{label}</div>
                 <div style={{ fontSize: 10, color: T.w30, marginTop: 2 }}>{desc}</div>
@@ -502,7 +507,7 @@ export default function GoldSystemApp() {
               GOLD SYSTEM <span style={{ color: T.w50, fontWeight: 400 }}>v5</span>
             </div>
             <div style={{ fontFamily: T.mono, fontSize: 9, color: T.w30, letterSpacing: '.12em', marginTop: 3 }}>
-              XAU/USD · H1 · INTRADAY · LIQUID GLASS
+              XAU/USD · H1 · INTRADAY
             </div>
           </div>
         </div>
@@ -515,13 +520,14 @@ export default function GoldSystemApp() {
             }} />
             {error ? 'ERREUR API' : loading ? 'SYNC...' : `MAJ: ${lastFetch} · ${countdown}s`}
           </div>
-          <div style={{ fontFamily: T.mono, fontSize: 13, color: T.w90, letterSpacing: '.08em' }}>{clock}</div>
+          <div style={{ fontFamily: T.mono, fontSize: 13, color: T.w90, letterSpacing: '.08em', minWidth: 'fit-content' }}>{clock}</div>
           <div style={{
             fontFamily: T.mono, fontSize: 10, fontWeight: 600,
             padding: '5px 12px', borderRadius: 10, letterSpacing: '.08em',
             background: sess?.active ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)',
             border: `1px solid ${sess?.active ? 'rgba(255,255,255,0.2)' : T.w08}`,
             color: sess?.active ? T.white : T.w30,
+            minWidth: 'fit-content',
           }}>
             {loading ? '...' : (sess?.name || 'CHARGEMENT')}
           </div>
@@ -577,11 +583,11 @@ export default function GoldSystemApp() {
           )}
 
           {/* ROW 1 — Sessions + Biais */}
-          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14, marginBottom: 14 }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginBottom: 14 }}>
             <div style={css.card}>
               <div style={css.cardBar(T.white)} />
               <div style={css.cardLabel}>Sessions <span style={{ fontFamily: T.mono, fontSize: 9, color: T.w30 }}>{clock}</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
                 <SessCard name="LONDON" time="07h–16h UTC" active={sess?.london} />
                 <SessCard name="OVERLAP" time="13h–16h UTC" active={sess?.overlap} />
                 <SessCard name="NEW YORK" time="13h–21h UTC" active={sess?.ny} />
@@ -590,7 +596,7 @@ export default function GoldSystemApp() {
             <div style={css.card}>
               <div style={css.cardBar(T.w50)} />
               <div style={css.cardLabel}>Biais macro — automatique temps réel</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
                 {[
                   { label: 'LONG', score: data?.long_score || 0, active: isLong, color: T.up },
                   { label: 'SHORT', score: data?.short_score || 0, active: isShort, color: T.down },
@@ -620,7 +626,7 @@ export default function GoldSystemApp() {
           </div>
 
           {/* ROW 2 — Instruments + Corrélations */}
-          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 14 }}>
             <div style={css.card}>
               <div style={css.cardBar(T.white)} />
               <div style={css.cardLabel}>
@@ -654,9 +660,9 @@ export default function GoldSystemApp() {
                 { name: 'VIX', val: +0.61 },
                 { name: 'SPX', val: -0.45 },
               ].map(({ name, val }) => (
-                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', ...css.divider }}>
+                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', ...css.divider, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.w70, width: 42 }}>{name}</span>
-                  <div style={{ flex: 1, height: 4, background: T.w05, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ flex: 1, height: 4, background: T.w05, borderRadius: 2, overflow: 'hidden', position: 'relative', minWidth: 100 }}>
                     <div style={{
                       height: '100%', borderRadius: 2, position: 'absolute',
                       width: `${Math.abs(val) * 50}%`,
@@ -684,7 +690,7 @@ export default function GoldSystemApp() {
           </div>
 
           {/* ROW 3 — Signal + Filtres actifs */}
-          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 14 }}>
             <div style={css.card}>
               <div style={css.cardBar(isLong ? T.up : isShort ? T.down : T.w50)} />
               <div style={css.cardLabel}>Signal du jour — automatique</div>
@@ -731,8 +737,8 @@ export default function GoldSystemApp() {
               ) : [
                 { label: 'DXY',  longOk: instr?.DXY?.trend === 'bear',  shortOk: instr?.DXY?.trend === 'bull',  hint: instrHint(instr?.DXY, (i) => `${i.price.toFixed(2)} · MA${i.ma?.toFixed(2)}`) },
                 { label: 'TLT',  longOk: instr?.TLT?.trend === 'bull',  shortOk: instr?.TLT?.trend === 'bear',  hint: instrHint(instr?.TLT, (i) => `${i.price.toFixed(2)} · MA${i.ma?.toFixed(2)}`) },
-                { label: 'VIX',  longOk: (instr?.VIX?.price || 0) > 20, shortOk: (instr?.VIX?.price || 0) <= 20 && !!instr?.VIX && !instr?.VIX?.error, hint: instrHint(instr?.VIX, (i) => `${i.price.toFixed(2)} · seuil 20`) },
-                { label: 'SPX',  longOk: instr?.SPX?.trend === 'bear',  shortOk: instr?.SPX?.trend === 'bull',  hint: instrHint(instr?.SPX, (i) => `${i.price.toLocaleString('fr-FR')} · MA${i.ma?.toLocaleString('fr-FR')}`) },
+                { label: 'VIX',  longOk: (instr?.VIX?.price || 0) > 20, shortOk: (instr?.VIX?.price || 0) <= 20 && !!instr?.VIX && !instr?.VIX?.error, hint: instrHint(instr?.VIX, (i) => `${i.price.toFixed(2)}`) },
+                { label: 'SPX',  longOk: instr?.SPX?.trend === 'bear',  shortOk: instr?.SPX?.trend === 'bull',  hint: instrHint(instr?.SPX, (i) => `${i.price.toLocaleString('fr-FR')} · MA${i.ma?.toFixed(2)}`) },
               ].map(({ label, longOk, shortOk, hint }) => (
                 <div key={label} style={{ ...css.row }}>
                   <div>
@@ -756,7 +762,7 @@ export default function GoldSystemApp() {
           </div>
 
           {/* ROW 4 — Métriques */}
-          <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+          <div className="responsive-grid-4" style={css.grid4}>
             {[
               { val: loading ? '–' : (sess?.name || '–'), label: 'Session active', color: sess?.active ? T.white : T.w30 },
               { val: loading ? '–' : (data?.bias || 'NEUTRE'), label: 'Biais macro', color: isLong ? T.up : isShort ? T.down : T.w30 },

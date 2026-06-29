@@ -1,0 +1,17 @@
+# Dépendances
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# Variables d'environnement — NE JAMAIS COMMITTER
+.env
+.env.local
+.env.*.local
+
+# Build React
+frontend/build/
+
+# Divers
+.DS_Store
+*.log

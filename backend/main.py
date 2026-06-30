@@ -33,16 +33,13 @@ RR_RATIO          = 2.0
 FALLBACK_SL_PIPS  = 150
 
 # ── INSTRUMENTS Alpha Vantage ─────────────────────────────────
-# Tous disponibles sur le plan gratuit Alpha Vantage
-# function TIME_SERIES_DAILY pour ETF/stocks
-# function FX_DAILY pour forex (DXY via EUR/USD inversé)
-# function TIME_SERIES_DAILY pour VIX (symbol VIX)
+# Symboles vérifiés disponibles sur le plan gratuit Alpha Vantage
 INSTR = {
-    "DXY":  {"symbol": "DXY",     "ma": 20, "name": "Dollar Index",     "type": "index"},
-    "TLT":  {"symbol": "TLT",     "ma": 20, "name": "Taux réels US",    "type": "etf"},
-    "VIX":  {"symbol": "VIX",     "ma": 20, "name": "Indice de la peur","type": "index"},
-    "SPX":  {"symbol": "SPY",     "ma": 50, "name": "S&P 500 (SPY)",    "type": "etf"},
-    "GOLD": {"symbol": "XAUUSD",  "ma": 20, "name": "Gold Spot",        "type": "forex"},
+    "DXY":  {"symbol": "EUR/USD", "from": "EUR", "to": "USD",  "ma": 20, "name": "Dollar Index (EUR/USD inv.)", "type": "fx"},
+    "TLT":  {"symbol": "TLT",                                  "ma": 20, "name": "Taux réels US",               "type": "stock"},
+    "VIX":  {"symbol": "SPY",                                  "ma": 20, "name": "Volatilité (SPY proxy)",       "type": "stock"},
+    "SPX":  {"symbol": "SPY",                                  "ma": 50, "name": "S&P 500 (SPY ETF)",           "type": "stock"},
+    "GOLD": {"symbol": "GLD",                                  "ma": 20, "name": "Gold (GLD ETF ×10≈XAU)",      "type": "stock"},
 }
 
 # ── CACHE ─────────────────────────────────────────────────────
@@ -87,13 +84,12 @@ async def fetch_one(client: httpx.AsyncClient, key: str):
         return key, hit
 
     try:
-        # Alpha Vantage : TIME_SERIES_DAILY pour tout
-        # Pour Gold on utilise FX_DAILY (XAU/USD)
-        if info["type"] == "forex":
+        # Alpha Vantage : TIME_SERIES_DAILY pour stocks/ETF, FX_DAILY pour forex
+        if info["type"] == "fx":
             params = {
                 "function":    "FX_DAILY",
-                "from_symbol": "XAU",
-                "to_symbol":   "USD",
+                "from_symbol": info["from"],
+                "to_symbol":   info["to"],
                 "outputsize":  "compact",
                 "apikey":      AV_KEY,
             }
@@ -128,13 +124,12 @@ async def fetch_one(client: httpx.AsyncClient, key: str):
 
         def bar(d):
             row = ts[d]
-            # Alpha Vantage préfixe les clés avec "1. ", "2. ", etc.
-            prefix = "1. " if "1. open" in row else ""
+            # Alpha Vantage : clés toujours sous forme "1. open", "2. high", etc.
             return {
-                "open":  float(row.get(f"{prefix}open",  row.get("1. open",  0))),
-                "high":  float(row.get(f"{prefix}high",  row.get("2. high",  0))),
-                "low":   float(row.get(f"{prefix}low",   row.get("3. low",   0))),
-                "close": float(row.get(f"{prefix}close", row.get("4. close", 0))),
+                "open":  float(row.get("1. open",  0)),
+                "high":  float(row.get("2. high",  0)),
+                "low":   float(row.get("3. low",   0)),
+                "close": float(row.get("4. close", 0)),
             }
 
         bars   = [bar(d) for d in dates]
@@ -143,9 +138,13 @@ async def fetch_one(client: httpx.AsyncClient, key: str):
         closes = [b["close"] for b in bars[:ma_period]]
         ma_val = sum(closes) / len(closes) if closes else None
 
-        # VIX : seuil 20 (pas de MA, on compare directement)
+        # VIX : SPY sous MA20 = risk-off = VIX haut = Long Gold
         if key == "VIX":
-            trend = "bull" if price > 20 else "bear"
+            trend = "bull" if price < ma_val else "bear"  # SPY sous MA = peur = VIX bull
+        # DXY : EUR/USD inversé (EUR bull = DXY bear)
+        elif key == "DXY":
+            raw = ("bull" if price > ma_val else "bear") if ma_val else "unknown"
+            trend = "bear" if raw == "bull" else "bull" if raw == "bear" else "unknown"
         else:
             trend = ("bull" if price > ma_val else "bear") if ma_val else "unknown"
 
@@ -185,9 +184,9 @@ def compute_bias(instr: dict):
     if tlt.get("trend") == "bull":   L.append("TLT")
     elif tlt.get("trend") == "bear": S.append("TLT")
 
-    # VIX > 20 = peur = Gold Long
-    if vix.get("trend") == "bull":   L.append("VIX")
-    elif vix.get("trend") == "bear": S.append("VIX")
+    # VIX proxy : SPY sous MA = risk-off = Long Gold
+    if vix.get("trend") == "bull":   L.append("VIX")  # SPY sous MA = peur
+    elif vix.get("trend") == "bear": S.append("VIX")  # SPY dessus MA = confiance
 
     if spx.get("trend") == "bear":   L.append("SPX")
     elif spx.get("trend") == "bull": S.append("SPX")
@@ -209,9 +208,10 @@ def get_session() -> dict:
 
 # ── SL/TP ─────────────────────────────────────────────────────
 def _sl_tp_from_cache() -> tuple[int, int]:
-    gold_cache = _cached("XAUUSD_20")
+    gold_cache = _cached("GLD_20")
     if gold_cache and gold_cache.get("atr14"):
-        sl = round(gold_cache["atr14"] * ATR_SL_MULTIPLIER)
+        # GLD ≈ XAU/10 → on multiplie par 10 pour avoir des pips Gold cohérents
+        sl = round(gold_cache["atr14"] * ATR_SL_MULTIPLIER * 10)
         tp = round(sl * RR_RATIO)
         return sl, tp
     return FALLBACK_SL_PIPS, FALLBACK_SL_PIPS * int(RR_RATIO)

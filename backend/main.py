@@ -3,14 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, Literal
-import httpx, asyncio, time, os, uuid
+import asyncio, time, os, uuid
+import yfinance as yf
 
 app = FastAPI(title="Gold System API")
 
 # ── CORS ──────────────────────────────────────────────────────
-# Restreint aux origines connues. Ajouter l'URL Vercel de prod dans
-# la variable d'environnement ALLOWED_ORIGIN (ex: https://gold-system.vercel.app).
-# En local, http://localhost:3000 est toujours autorisé.
 _ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "")
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -27,17 +25,21 @@ app.add_middleware(
 )
 
 # ── CONFIG ────────────────────────────────────────────────────
-API_KEY  = os.getenv("TWELVE_DATA_KEY", "demo")
-BASE     = "https://api.twelvedata.com"
-CACHE_TTL = 300  # 5 min
-
-# ATR : on récupère 15 bougies journalières pour Gold afin de calculer l'ATR14.
-# SL  = ATR14 × 1.5  (en points XAU/USD, 1 point ≈ 1 pip Gold)
-# TP  = SL × 2       (RR 2:1)
-ATR_PERIOD       = 14
+CACHE_TTL         = 300   # 5 min
+ATR_PERIOD        = 14
 ATR_SL_MULTIPLIER = 1.5
 RR_RATIO          = 2.0
-FALLBACK_SL_PIPS  = 150   # utilisé uniquement si le calcul ATR échoue
+FALLBACK_SL_PIPS  = 150
+
+# ── INSTRUMENTS Yahoo Finance ─────────────────────────────────
+# Symboles 100% disponibles sans clé API sur Yahoo Finance
+INSTR = {
+    "DXY":  {"symbol": "DX-Y.NYB", "ma": 20, "name": "Dollar Index"},
+    "TLT":  {"symbol": "TLT",      "ma": 20, "name": "Taux réels US"},
+    "VIX":  {"symbol": "^VIX",     "ma": 20, "name": "Indice de la peur"},
+    "SPX":  {"symbol": "^GSPC",    "ma": 50, "name": "S&P 500"},
+    "GOLD": {"symbol": "GC=F",     "ma": 20, "name": "Gold Spot"},
+}
 
 # ── CACHE IN-MEMORY ───────────────────────────────────────────
 _cache: dict = {}
@@ -53,67 +55,50 @@ def _cached(k: str):
 def _set_cache(k: str, d):
     _cache[k] = (d, time.time())
 
-# ── INSTRUMENTS ───────────────────────────────────────────────
-INSTR = {
-    "DXY":  {"symbol": "DX/USD",  "ma": 20, "name": "Dollar Index"},
-    "TLT":  {"symbol": "TLT",     "ma": 20, "name": "Taux réels US"},
-    "VIX":  {"symbol": "VIX",     "ma": 20, "name": "Indice de la peur"},
-    "SPX":  {"symbol": "SPX500",  "ma": 50, "name": "S&P 500"},
-    "GOLD": {"symbol": "XAU/USD", "ma": 20, "name": "Gold Spot"},
-}
-
-# ── ATR CALCULATION ───────────────────────────────────────────
-def _compute_atr(values: list, period: int = ATR_PERIOD) -> Optional[float]:
-    """
-    Calcule l'ATR sur `period` bougies à partir des valeurs Twelve Data.
-    values[0] = bougie la plus récente (format: {high, low, close}).
-    Retourne None si les données sont insuffisantes.
-    """
-    if len(values) < period + 1:
+# ── ATR ───────────────────────────────────────────────────────
+def _compute_atr(df, period: int = ATR_PERIOD) -> Optional[float]:
+    """Calcule ATR14 depuis un DataFrame yfinance (colonnes High/Low/Close)."""
+    if df is None or len(df) < period + 1:
         return None
-    true_ranges = []
-    for i in range(period):
-        try:
-            high  = float(values[i]["high"])
-            low   = float(values[i]["low"])
-            prev_close = float(values[i + 1]["close"])
+    try:
+        true_ranges = []
+        for i in range(period):
+            high       = float(df["High"].iloc[i])
+            low        = float(df["Low"].iloc[i])
+            prev_close = float(df["Close"].iloc[i + 1])
             tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
             true_ranges.append(tr)
-        except (KeyError, ValueError):
-            return None
-    return round(sum(true_ranges) / len(true_ranges), 4)
+        return round(sum(true_ranges) / len(true_ranges), 4)
+    except Exception:
+        return None
 
 # ── FETCH INSTRUMENT ─────────────────────────────────────────
-async def fetch_one(client: httpx.AsyncClient, key: str):
+def _fetch_one_sync(key: str) -> dict:
+    """Fetch synchrone via yfinance (appelé dans un thread séparé)."""
     info      = INSTR[key]
     sym       = info["symbol"]
     ma_period = info["ma"]
-    # Pour Gold, on récupère ATR_PERIOD+1 bougies supplémentaires pour le calcul ATR.
-    outputsize = ma_period + 1 if key != "GOLD" else max(ma_period, ATR_PERIOD) + 2
-
     cache_key = f"{sym}_{ma_period}"
+
     hit = _cached(cache_key)
     if hit:
-        return key, hit
+        return hit
 
     try:
-        r = await client.get(
-            f"{BASE}/time_series"
-            f"?symbol={sym}&interval=1day&outputsize={outputsize}&apikey={API_KEY}",
-            timeout=10,
-        )
-        data = r.json()
+        # On récupère max(ma_period, ATR_PERIOD) + 5 bougies journalières
+        nb = max(ma_period, ATR_PERIOD) + 5
+        ticker = yf.Ticker(sym)
+        df = ticker.history(period=f"{nb}d", interval="1d", auto_adjust=True)
 
-        if data.get("status") == "error" or "code" in data:
-            return key, {"error": data.get("message", "API error"), "symbol": sym}
+        if df is None or len(df) < 2:
+            return {"symbol": sym, "error": "Données insuffisantes"}
 
-        values = data.get("values") or []
-        if len(values) < 2:
-            return key, {"symbol": sym, "error": "Données insuffisantes"}
+        # Trier du plus récent au plus ancien
+        df = df.sort_index(ascending=False).reset_index()
 
-        price = float(values[0]["close"])
-        prev  = float(values[1]["close"])
-        closes = [float(v["close"]) for v in values[:ma_period]]
+        price = float(df["Close"].iloc[0])
+        prev  = float(df["Close"].iloc[1])
+        closes = [float(df["Close"].iloc[i]) for i in range(min(ma_period, len(df)))]
         ma_val = sum(closes) / len(closes) if closes else None
 
         result: dict = {
@@ -128,16 +113,22 @@ async def fetch_one(client: httpx.AsyncClient, key: str):
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 
-        # ATR uniquement pour Gold (utilisé pour SL/TP dynamiques)
+        # ATR uniquement pour Gold
         if key == "GOLD":
-            atr = _compute_atr(values)
+            atr = _compute_atr(df)
             result["atr14"] = atr
 
         _set_cache(cache_key, result)
-        return key, result
+        return result
 
     except Exception as e:
-        return key, {"symbol": sym, "error": str(e)}
+        return {"symbol": sym, "error": str(e)}
+
+async def fetch_one(key: str) -> tuple[str, dict]:
+    """Wrapper async : exécute yfinance dans un thread pour ne pas bloquer."""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _fetch_one_sync, key)
+    return key, result
 
 # ── BIAS ──────────────────────────────────────────────────────
 def compute_bias(instr: dict):
@@ -147,16 +138,16 @@ def compute_bias(instr: dict):
     vix = instr.get("VIX", {})
     spx = instr.get("SPX", {})
 
-    if dxy.get("trend") == "bear":  L.append("DXY")
+    if dxy.get("trend") == "bear":   L.append("DXY")
     elif dxy.get("trend") == "bull": S.append("DXY")
 
-    if tlt.get("trend") == "bull":  L.append("TLT")
+    if tlt.get("trend") == "bull":   L.append("TLT")
     elif tlt.get("trend") == "bear": S.append("TLT")
 
-    if vix.get("price", 0) > 20:    L.append("VIX")
+    if vix.get("price", 0) > 20:     L.append("VIX")
     elif vix.get("price") and vix["price"] <= 20: S.append("VIX")
 
-    if spx.get("trend") == "bear":  L.append("SPX")
+    if spx.get("trend") == "bear":   L.append("SPX")
     elif spx.get("trend") == "bull": S.append("SPX")
 
     b = "LONG" if len(L) >= 3 else "SHORT" if len(S) >= 3 else "NEUTRAL"
@@ -164,7 +155,7 @@ def compute_bias(instr: dict):
 
 # ── SESSION ───────────────────────────────────────────────────
 def get_session() -> dict:
-    h = datetime.now(timezone.utc).hour
+    h       = datetime.now(timezone.utc).hour
     london  = 7 <= h < 16
     ny      = 13 <= h < 21
     overlap = 13 <= h < 16
@@ -177,18 +168,13 @@ def get_session() -> dict:
         "utc_hour": h,
     }
 
-# ── HELPER : SL / TP depuis ATR Gold ─────────────────────────
+# ── SL / TP depuis ATR Gold ───────────────────────────────────
 def _sl_tp_from_cache() -> tuple[int, int]:
-    """
-    Lit l'ATR14 du Gold depuis le cache et calcule SL/TP.
-    Retourne (sl_pips, tp_pips) — en points XAU/USD arrondis à l'entier.
-    Fallback sur les valeurs par défaut si le cache est absent ou l'ATR null.
-    """
-    gold_cache = _cached("XAU/USD_20")
+    gold_cache = _cached("GC=F_20")
     if gold_cache and gold_cache.get("atr14"):
         atr = gold_cache["atr14"]
-        sl = round(atr * ATR_SL_MULTIPLIER)
-        tp = round(sl * RR_RATIO)
+        sl  = round(atr * ATR_SL_MULTIPLIER)
+        tp  = round(sl * RR_RATIO)
         return sl, tp
     return FALLBACK_SL_PIPS, FALLBACK_SL_PIPS * int(RR_RATIO)
 
@@ -196,13 +182,10 @@ def _sl_tp_from_cache() -> tuple[int, int]:
 
 @app.get("/api/macro")
 async def get_macro():
-    instruments: dict = {}
-    async with httpx.AsyncClient() as c:
-        for k in INSTR:
-            key, val = await fetch_one(c, k)
-            instruments[key] = val
-            # Délai minimal pour respecter la limite Twelve Data (8 req/min gratuit)
-            await asyncio.sleep(0.15)
+    # Fetch tous les instruments en parallèle (yfinance dans des threads)
+    tasks = [fetch_one(k) for k in INSTR]
+    results = await asyncio.gather(*tasks)
+    instruments = {k: v for k, v in results}
 
     b, ls, ss, lsig, ssig = compute_bias(instruments)
     return {
@@ -224,7 +207,7 @@ SIGNAL_SECRET = os.getenv("SIGNAL_SECRET")
 
 class TVSignal(BaseModel):
     direction: Literal["LONG", "SHORT"]
-    type: str           # "SSL", "BSL", "RSI_DIV", "VOLUME_SPIKE", ...
+    type: str
     volume_ok: bool = False
     zone_ok:   bool = False
 
@@ -258,8 +241,7 @@ async def post_signal(signal: TVSignal, secret: Optional[str] = None):
 async def get_decision():
     now = datetime.now(timezone.utc)
 
-    # 1) Bias macro — lu depuis le cache, sans re-appeler Twelve Data
-    #    Si le cache est vide (premier démarrage), on lance get_macro() une fois.
+    # Bias depuis cache (ou appel complet si cache vide)
     instruments_cached: dict = {}
     all_cached = True
     for k, info in INSTR.items():
@@ -271,11 +253,9 @@ async def get_decision():
             break
 
     if not all_cached:
-        # Cache absent → un seul appel complet, puis lecture du résultat
         await get_macro()
         for k, info in INSTR.items():
-            hit = _cached(f"{info['symbol']}_{info['ma']}")
-            instruments_cached[k] = hit or {}
+            instruments_cached[k] = _cached(f"{info['symbol']}_{info['ma']}") or {}
 
     bias, long_score, short_score, _, _ = compute_bias(instruments_cached)
     session      = get_session()
@@ -284,7 +264,6 @@ async def get_decision():
     macro_ok     = bias in ("LONG", "SHORT")
     score        = max(long_score, short_score)
 
-    # 2) Signal technique (lecture thread-safe)
     async with _signal_lock:
         signal = _last_signal
 
@@ -294,7 +273,6 @@ async def get_decision():
     )
     signal_valid = fresh and signal.volume_ok and signal.zone_ok
 
-    # 3) Fusion
     if not session_ok:
         return _none(f"Hors session ({session_name})")
     if not macro_ok:
@@ -304,7 +282,6 @@ async def get_decision():
     if signal.direction != bias:
         return _none(f"Signal {signal.direction} contredit le bias macro {bias}")
 
-    # 4) SL / TP dynamiques depuis ATR Gold
     sl_pips, tp_pips = _sl_tp_from_cache()
 
     return {
@@ -324,9 +301,9 @@ def _none(reason: str) -> dict:
 @app.get("/api/health")
 async def health():
     return {
-        "status":      "ok",
-        "time":        datetime.now(timezone.utc).isoformat(),
-        "api_key_set": API_KEY != "demo",
-        "cache_keys":  len(_cache),
+        "status":       "ok",
+        "time":         datetime.now(timezone.utc).isoformat(),
+        "data_source":  "Yahoo Finance (yfinance)",
+        "cache_keys":   len(_cache),
         "cors_origins": ALLOWED_ORIGINS,
     }

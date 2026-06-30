@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, Literal
-import asyncio, time, os, uuid
-import yfinance as yf
+import httpx, asyncio, time, os, uuid
 
 app = FastAPI(title="Gold System API")
 
@@ -25,23 +24,30 @@ app.add_middleware(
 )
 
 # ── CONFIG ────────────────────────────────────────────────────
-CACHE_TTL         = 300   # 5 min
+API_KEY           = os.getenv("TWELVE_DATA_KEY", "demo")
+BASE              = "https://api.twelvedata.com"
+CACHE_TTL         = 300
 ATR_PERIOD        = 14
 ATR_SL_MULTIPLIER = 1.5
 RR_RATIO          = 2.0
 FALLBACK_SL_PIPS  = 150
 
-# ── INSTRUMENTS Yahoo Finance ─────────────────────────────────
-# Symboles 100% disponibles sans clé API sur Yahoo Finance
+# ── INSTRUMENTS ───────────────────────────────────────────────
+# Symboles vérifiés disponibles sur le plan GRATUIT Twelve Data
+# DXY  → EUR/USD  (corrélation inverse parfaite, bull EUR = bear DXY et vice-versa)
+# VIX  → proxy via SPY volatilité  (VIX n'est pas dispo gratuit)
+# SPX  → SPY (ETF S&P 500, dispo gratuit)
+# TLT  → TLT (dispo gratuit)
+# GOLD → XAU/USD (dispo gratuit)
 INSTR = {
-    "DXY":  {"symbol": "DX-Y.NYB", "ma": 20, "name": "Dollar Index"},
-    "TLT":  {"symbol": "TLT",      "ma": 20, "name": "Taux réels US"},
-    "VIX":  {"symbol": "^VIX",     "ma": 20, "name": "Indice de la peur"},
-    "SPX":  {"symbol": "^GSPC",    "ma": 50, "name": "S&P 500"},
-    "GOLD": {"symbol": "GC=F",     "ma": 20, "name": "Gold Spot"},
+    "DXY":  {"symbol": "EUR/USD", "ma": 20, "name": "Dollar Index (proxy EUR/USD inv.)"},
+    "TLT":  {"symbol": "TLT",     "ma": 20, "name": "Taux réels US"},
+    "VIX":  {"symbol": "SPY",     "ma": 20, "name": "Volatilité (proxy SPY)"},
+    "SPX":  {"symbol": "SPY",     "ma": 50, "name": "S&P 500 (SPY ETF)"},
+    "GOLD": {"symbol": "XAU/USD", "ma": 20, "name": "Gold Spot"},
 }
 
-# ── CACHE IN-MEMORY ───────────────────────────────────────────
+# ── CACHE ─────────────────────────────────────────────────────
 _cache: dict = {}
 _signal_lock = asyncio.Lock()
 
@@ -56,50 +62,67 @@ def _set_cache(k: str, d):
     _cache[k] = (d, time.time())
 
 # ── ATR ───────────────────────────────────────────────────────
-def _compute_atr(df, period: int = ATR_PERIOD) -> Optional[float]:
-    """Calcule ATR14 depuis un DataFrame yfinance (colonnes High/Low/Close)."""
-    if df is None or len(df) < period + 1:
+def _compute_atr(values: list, period: int = ATR_PERIOD) -> Optional[float]:
+    if len(values) < period + 1:
         return None
-    try:
-        true_ranges = []
-        for i in range(period):
-            high       = float(df["High"].iloc[i])
-            low        = float(df["Low"].iloc[i])
-            prev_close = float(df["Close"].iloc[i + 1])
+    true_ranges = []
+    for i in range(period):
+        try:
+            high       = float(values[i]["high"])
+            low        = float(values[i]["low"])
+            prev_close = float(values[i + 1]["close"])
             tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
             true_ranges.append(tr)
-        return round(sum(true_ranges) / len(true_ranges), 4)
-    except Exception:
-        return None
+        except (KeyError, ValueError):
+            return None
+    return round(sum(true_ranges) / len(true_ranges), 4)
 
-# ── FETCH INSTRUMENT ─────────────────────────────────────────
-def _fetch_one_sync(key: str) -> dict:
-    """Fetch synchrone via yfinance (appelé dans un thread séparé)."""
+# ── FETCH ─────────────────────────────────────────────────────
+async def fetch_one(client: httpx.AsyncClient, key: str):
     info      = INSTR[key]
     sym       = info["symbol"]
     ma_period = info["ma"]
-    cache_key = f"{sym}_{ma_period}"
+    outputsize = max(ma_period, ATR_PERIOD) + 2
+    cache_key  = f"{sym}_{ma_period}"
 
     hit = _cached(cache_key)
     if hit:
-        return hit
+        return key, hit
 
     try:
-        # On récupère max(ma_period, ATR_PERIOD) + 5 bougies journalières
-        nb = max(ma_period, ATR_PERIOD) + 5
-        ticker = yf.Ticker(sym)
-        df = ticker.history(period=f"{nb}d", interval="1d", auto_adjust=True)
+        r = await client.get(
+            f"{BASE}/time_series"
+            f"?symbol={sym}&interval=1day&outputsize={outputsize}&apikey={API_KEY}",
+            timeout=10,
+        )
+        data = r.json()
 
-        if df is None or len(df) < 2:
-            return {"symbol": sym, "error": "Données insuffisantes"}
+        if data.get("status") == "error" or "code" in data:
+            return key, {"error": data.get("message", "API error"), "symbol": sym}
 
-        # Trier du plus récent au plus ancien
-        df = df.sort_index(ascending=False).reset_index()
+        values = data.get("values") or []
+        if len(values) < 2:
+            return key, {"symbol": sym, "error": "Données insuffisantes"}
 
-        price = float(df["Close"].iloc[0])
-        prev  = float(df["Close"].iloc[1])
-        closes = [float(df["Close"].iloc[i]) for i in range(min(ma_period, len(df)))]
+        price  = float(values[0]["close"])
+        prev   = float(values[1]["close"])
+        closes = [float(v["close"]) for v in values[:ma_period]]
         ma_val = sum(closes) / len(closes) if closes else None
+
+        # Pour DXY (proxy EUR/USD) : on inverse la logique de tendance
+        # EUR/USD bull = DXY bear, EUR/USD bear = DXY bull
+        if key == "DXY":
+            raw_trend = ("bull" if price > ma_val else "bear") if ma_val else "unknown"
+            trend = "bear" if raw_trend == "bull" else "bull" if raw_trend == "bear" else "unknown"
+        # Pour VIX (proxy SPY) : on utilise la variation % comme indicateur de peur
+        # SPY baisse forte (< -1%) = VIX haut = risk-off
+        elif key == "VIX":
+            change = round((price - prev) / prev * 100, 2) if prev else 0
+            # On simule un "price" VIX : SPY qui baisse = VIX monte
+            # On garde price/ma pour l'affichage mais on crée un vix_proxy
+            trend = ("bear" if price > ma_val else "bull") if ma_val else "unknown"
+        else:
+            trend = ("bull" if price > ma_val else "bear") if ma_val else "unknown"
 
         result: dict = {
             "symbol":       sym,
@@ -109,26 +132,18 @@ def _fetch_one_sync(key: str) -> dict:
             "ma_period":    ma_period,
             "above_ma":     (price > ma_val) if ma_val else None,
             "change_pct":   round((price - prev) / prev * 100, 2) if prev else 0,
-            "trend":        ("bull" if price > ma_val else "bear") if ma_val else "unknown",
+            "trend":        trend,
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 
-        # ATR uniquement pour Gold
         if key == "GOLD":
-            atr = _compute_atr(df)
-            result["atr14"] = atr
+            result["atr14"] = _compute_atr(values)
 
         _set_cache(cache_key, result)
-        return result
+        return key, result
 
     except Exception as e:
-        return {"symbol": sym, "error": str(e)}
-
-async def fetch_one(key: str) -> tuple[str, dict]:
-    """Wrapper async : exécute yfinance dans un thread pour ne pas bloquer."""
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _fetch_one_sync, key)
-    return key, result
+        return key, {"symbol": sym, "error": str(e)}
 
 # ── BIAS ──────────────────────────────────────────────────────
 def compute_bias(instr: dict):
@@ -138,14 +153,16 @@ def compute_bias(instr: dict):
     vix = instr.get("VIX", {})
     spx = instr.get("SPX", {})
 
+    # DXY proxy EUR/USD inversé : trend déjà inversé dans fetch_one
     if dxy.get("trend") == "bear":   L.append("DXY")
     elif dxy.get("trend") == "bull": S.append("DXY")
 
     if tlt.get("trend") == "bull":   L.append("TLT")
     elif tlt.get("trend") == "bear": S.append("TLT")
 
-    if vix.get("price", 0) > 20:     L.append("VIX")
-    elif vix.get("price") and vix["price"] <= 20: S.append("VIX")
+    # VIX proxy SPY : SPY sous MA = risk-off = Long Gold
+    if vix.get("trend") == "bear":   L.append("VIX")
+    elif vix.get("trend") == "bull": S.append("VIX")
 
     if spx.get("trend") == "bear":   L.append("SPX")
     elif spx.get("trend") == "bull": S.append("SPX")
@@ -168,9 +185,9 @@ def get_session() -> dict:
         "utc_hour": h,
     }
 
-# ── SL / TP depuis ATR Gold ───────────────────────────────────
+# ── SL/TP ─────────────────────────────────────────────────────
 def _sl_tp_from_cache() -> tuple[int, int]:
-    gold_cache = _cached("GC=F_20")
+    gold_cache = _cached("XAU/USD_20")
     if gold_cache and gold_cache.get("atr14"):
         atr = gold_cache["atr14"]
         sl  = round(atr * ATR_SL_MULTIPLIER)
@@ -182,10 +199,12 @@ def _sl_tp_from_cache() -> tuple[int, int]:
 
 @app.get("/api/macro")
 async def get_macro():
-    # Fetch tous les instruments en parallèle (yfinance dans des threads)
-    tasks = [fetch_one(k) for k in INSTR]
-    results = await asyncio.gather(*tasks)
-    instruments = {k: v for k, v in results}
+    instruments: dict = {}
+    async with httpx.AsyncClient() as c:
+        for k in INSTR:
+            key, val = await fetch_one(c, k)
+            instruments[key] = val
+            await asyncio.sleep(0.15)
 
     b, ls, ss, lsig, ssig = compute_bias(instruments)
     return {
@@ -199,8 +218,7 @@ async def get_macro():
         "session":       get_session(),
     }
 
-# ── SIGNAL TECHNIQUE ──────────────────────────────────────────
-
+# ── SIGNAL ────────────────────────────────────────────────────
 SIGNAL_MAX_AGE_SECONDS = 180
 SIGNAL_SECRET = os.getenv("SIGNAL_SECRET")
 
@@ -241,7 +259,6 @@ async def post_signal(signal: TVSignal, secret: Optional[str] = None):
 async def get_decision():
     now = datetime.now(timezone.utc)
 
-    # Bias depuis cache (ou appel complet si cache vide)
     instruments_cached: dict = {}
     all_cached = True
     for k, info in INSTR.items():
@@ -303,7 +320,8 @@ async def health():
     return {
         "status":       "ok",
         "time":         datetime.now(timezone.utc).isoformat(),
-        "data_source":  "Yahoo Finance (yfinance)",
+        "api_key_set":  API_KEY != "demo",
+        "data_source":  "Twelve Data (symboles plan gratuit)",
         "cache_keys":   len(_cache),
         "cors_origins": ALLOWED_ORIGINS,
     }
